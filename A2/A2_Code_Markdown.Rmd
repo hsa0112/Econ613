@@ -1,0 +1,1140 @@
+---
+title: "A2_Code"
+output: html_document
+---
+
+LOOK AT OTHER MARKDOWN AS IT IS MORE UP TO DATE AND HAS DROPPED KIDS (UNDER 18)
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+#initial stuff
+rm(list = ls())
+library(tidyverse)
+library(ggplot2)
+#see all the digits (hopefully)
+
+memory.limit(20000)
+  
+setwd("E:/Duke/Semester 2/Applied Micro/Assignments/A2")
+getwd()
+
+```
+
+```{r}
+#loading in data (seems to use same as before)
+# find all files and then import them separately
+dataFiles = list.files("E:/Duke/Semester 2/Applied Micro/Assignments/A1",pattern="*.csv") #all data should be .csv files so this should get all the names (including .csv extension)
+# for (i in 1:(length(dataFiles)/2)) assign(dataFiles[i], read.csv(dataFiles[i],colClasses = c("idmen" = "character"),header = TRUE))
+# for (i in 1+(length(dataFiles)/2):length(dataFiles)) assign(dataFiles[i], read.csv(dataFiles[i],colClasses = c("idind" ="character","idmen" = "character"),header = TRUE))
+
+for (i in 1:length(dataFiles)) assign(dataFiles[i], read.csv(dataFiles[i],colClasses = c("idind" ="character","idmen" = "character"),header = TRUE))
+#got warnings about colClasses sometimes not existing - believe that is because idind is not in hhDatas
+
+```
+
+#Ex 1
+# use datind2009 and using empstat, wage, and age
+
+```{r}
+
+#unclear if I should include individual and house id but will temporary include it
+
+# use pipeline and filter out missing age and wage and 0 wages
+ex1Data <- datind2009.csv[,c("idind","idmen","empstat","wage","age")] %>% filter(!is.na(wage),!is.na(age), wage != 0)
+
+#Consider Y = XB + e; Y is wage and X is age 
+
+#a. calculate correlation
+# correlation = rho = cov(x,y)/sd(x)sd(y)
+X <- ex1Data$age
+Y <- ex1Data$wage
+numerator <- cov(X,Y)
+denominator <- sd(X) * sd(Y)
+
+corr <- numerator/denominator
+corr
+
+
+
+
+```
+```{r}
+#b.
+#get the age data
+X <- ex1Data$age
+#make a column of 1s for intercept
+intercept <- rep(1,length(X))
+#this is my X data
+X <- cbind(intercept,X)
+#Y is wages
+Y <- ex1Data$wage
+
+# using equation Beta = inv(X'X)*X'Y
+betaHat <- solve(t(X)%*%X)%*%(t(X)%*%Y)
+betaHat 
+
+```
+
+```{r}
+
+
+#c.
+
+
+#getting appropriate Data
+X <- ex1Data$age
+intercept <-  rep(1,length(X))
+X <- cbind(intercept,X)
+Y <- ex1Data$wage
+
+#--------------------------
+
+
+#1. 
+paste("Standard OLS")
+# calculate residual using betaHat
+yhat <- X %*% betaHat
+
+residual <- yhat-Y
+# sum of squared residuals
+numerator <- t(residual) %*% residual
+# n - (k + 1)
+denominator <- nrow(ex1Data) -(1+1)
+
+#get sigmaHat estimate (unbiased estimator) - is squared so technically variance hat
+
+#sigmaHat = e'e/(n-(k+1))
+
+sigmaHat <- numerator/denominator
+# sigmaHat
+
+
+#create matrix of var cov and will extract sqrt of diagonals for SE (assuming homoscedasiticty)
+VarCov <- solve(t(X)%*%X) * sigmaHat[1]
+# VarCov
+
+# #create with Heteroskedasticity?
+#
+ex1DataByAge = ex1Data %>% group_by(age) %>%filter(!is.na(wage)) %>%summarize(condVar = var(wage))
+
+OLSStandErr <- sqrt(diag(VarCov))
+OLSStandErr
+
+# bootstrapping - In class, professor said to generally try to have samples around 500 so that is what I did (also sampled with replacement so weights can shift randomly)
+
+#2.
+
+paste("49 Bootstrap")
+# Via bootstrap with 49 replications
+
+bootstrap49Betas <- data.frame(matrix(ncol=2,nrow = 49))
+for (i in 1:49){
+  sampleIndices <- sample(nrow(ex1Data),500,replace = TRUE) # randomly choose 500 data (with replacement)
+  
+  #take a subset of our data that we will use
+  bootstrapData <- ex1Data[sampleIndices,]
+  X <- bootstrapData$age
+  intercept <-  rep(1,length(X))
+  X <- cbind(intercept,X)
+  Y <- bootstrapData$wage
+  
+  #get the Beta's for the resampled subset
+  betaHatBS <- solve(t(X)%*%X)%*%(t(X)%*%Y)
+  
+  #put it in for intercept and coefficient
+  bootstrap49Betas[i,1] <- betaHatBS[1]
+  bootstrap49Betas[i,2] <- betaHatBS[2]
+}
+
+
+#get SE (square root of variance of coefficients)
+intercept49SE <- sqrt(var(bootstrap49Betas[,1]))
+X49SE <- sqrt(var(bootstrap49Betas[,2]))
+
+intercept49SE
+X49SE
+
+
+
+
+#3. 
+paste("499 Bootstrap")
+# repeating process with 450 more replications 
+bootstrap499Betas <- data.frame(matrix(ncol=2,nrow = 499))
+for (i in 1:499){
+  sampleIndices <- sample(nrow(ex1Data),500,replace = TRUE) # randomly choose 500 data (with replacement)
+  
+  #take a subset of our data that we will use
+  bootstrapData <- ex1Data[sampleIndices,]
+  X <- bootstrapData$age
+  intercept <-  rep(1,length(X))
+  X <- cbind(intercept,X)
+  Y <- bootstrapData$wage
+  
+  #calculate betas of resampled subset
+  betaHatBS <- solve(t(X)%*%X)%*%(t(X)%*%Y)
+  bootstrap499Betas[i,1] <- betaHatBS[1]
+  bootstrap499Betas[i,2] <- betaHatBS[2]
+}
+
+# find SE's
+intercept499SE <- sqrt(var(bootstrap499Betas[,1]))
+X499SE <- sqrt(var(bootstrap499Betas[,2]))
+
+intercept499SE
+X499SE
+```
+
+#Ex 2
+
+```{r}
+#a-b
+#get the data we want
+ex2Data <- datind2005.csv
+ex2Data <- rbind(ex2Data,datind2006.csv)
+  ex2Data <- rbind(ex2Data,datind2007.csv)
+  ex2Data <- rbind(ex2Data,datind2008.csv)
+  ex2Data <- rbind(ex2Data,datind2009.csv)
+  ex2Data <- rbind(ex2Data,datind2010.csv)
+  ex2Data <- rbind(ex2Data,datind2011.csv)
+  ex2Data <- rbind(ex2Data,datind2012.csv)
+  ex2Data <- rbind(ex2Data,datind2013.csv)
+  ex2Data <- rbind(ex2Data,datind2014.csv)
+  ex2Data <- rbind(ex2Data,datind2015.csv)
+  ex2Data <- rbind(ex2Data,datind2016.csv)
+  ex2Data <- rbind(ex2Data,datind2017.csv)
+  ex2Data <- rbind(ex2Data,datind2018.csv)
+  
+  
+ex2Data <- ex2Data %>% filter(!is.na(age),!is.na(wage), wage != 0)
+
+ag <- rep(0,nrow(ex2Data))
+ex2Data$ag <- ag
+
+# 0 is, by default, people under 18
+ex2Data$ag[which(ex2Data$age %in% 18:25)] <- 1
+ex2Data$ag[which(ex2Data$age %in% 26:30)] <- 2
+ex2Data$ag[which(ex2Data$age %in% 31:35)] <- 3
+ex2Data$ag[which(ex2Data$age %in% 36:40)] <- 4
+ex2Data$ag[which(ex2Data$age %in% 41:45)] <- 5
+ex2Data$ag[which(ex2Data$age %in% 46:50)] <- 6
+ex2Data$ag[which(ex2Data$age %in% 51:55)] <- 7
+ex2Data$ag[which(ex2Data$age %in% 56:60)] <- 8
+ex2Data$ag[which(ex2Data$age > 60)] <- 9
+
+
+
+# initially thought plotting avg wages per year was sufficient but later told to do boxplots (which is below)
+# plot wage of each group across years - doing average wage of each group
+
+
+ageGroup0 <- ex2Data %>% group_by(year) %>% filter(ag == 0) %>% summarize(avgWage = mean(wage))
+
+ageGroup1<- ex2Data %>% group_by(year) %>% filter(ag==1) %>% summarize(avgWage  = mean(wage))
+
+ageGroup2 <- ex2Data %>% group_by(year) %>% filter(ag==2) %>% summarize(avgWage  = mean(wage))
+
+ageGroup3 <- ex2Data %>% group_by(year) %>% filter(ag==3) %>% summarize(avgWage  = mean(wage))
+
+ageGroup4 <- ex2Data %>% group_by(year) %>% filter(ag==4) %>% summarize(avgWage  = mean(wage))
+
+ageGroup5 <- ex2Data %>% group_by(year) %>% filter(ag ==5) %>% summarize(avgWage = mean(wage))
+
+ageGroup6 <- ex2Data %>% group_by(year) %>% filter(ag==6) %>% summarize(avgWage  = mean(wage))
+
+ageGroup7 <- ex2Data %>% group_by(year) %>% filter(ag==7) %>% summarize(avgWage  = mean(wage))
+
+ageGroup8 <- ex2Data %>% group_by(year) %>% filter(ag==8) %>% summarize(avgWage  = mean(wage))
+
+ageGroup9 <- ex2Data %>% group_by(year) %>% filter(ag==9) %>% summarize(avgWage  = mean(wage))
+
+# 14 years in this dataset
+groupNames <- c(rep("G0",14),rep("G1",14),rep("G2",14),rep("G3",14),rep("G4",14),rep("G5",14),rep("G6",14),rep("G7",14),rep("G8",14),rep("G9",14))
+
+groupData <- ageGroup0
+groupData <- rbind(groupData,ageGroup1)
+groupData <- rbind(groupData,ageGroup2)
+groupData <- rbind(groupData,ageGroup3)
+groupData <- rbind(groupData,ageGroup4)
+groupData <- rbind(groupData,ageGroup5)
+groupData <- rbind(groupData,ageGroup6)
+groupData <- rbind(groupData,ageGroup7)
+groupData <- rbind(groupData,ageGroup8)
+groupData <- rbind(groupData,ageGroup9)
+wageAndAgePerYear <- data.frame(groupNames,groupData)
+
+# line plots across years by each group
+ggplot(wageAndAgePerYear,aes(x=year,y=avgWage,col = groupNames)) + geom_line()
+
+
+#------------------------------------ MORE RESULTS CONTIONUED
+
+# LATER TOLD TO PLOT BOXPLOTS
+ageGroup0 <- ex2Data %>% group_by(year) %>% filter(ag == 0) 
+
+ageGroup1<- ex2Data %>% group_by(year) %>% filter(ag==1) 
+
+ageGroup2 <- ex2Data %>% group_by(year) %>% filter(ag==2) 
+
+ageGroup3 <- ex2Data %>% group_by(year) %>% filter(ag==3) 
+
+ageGroup4 <- ex2Data %>% group_by(year) %>% filter(ag==4) 
+
+ageGroup5 <- ex2Data %>% group_by(year) %>% filter(ag ==5) 
+
+ageGroup6 <- ex2Data %>% group_by(year) %>% filter(ag==6) 
+
+ageGroup7 <- ex2Data %>% group_by(year) %>% filter(ag==7) 
+
+ageGroup8 <- ex2Data %>% group_by(year) %>% filter(ag==8) 
+
+ageGroup9 <- ex2Data %>% group_by(year) %>% filter(ag==9) 
+
+ex2Data$year <- as.factor(ex2Data$year)
+ex2Data$ag <- as.factor(ex2Data$ag)
+
+#all together
+
+# Ag and Wage by Year
+ggplot(ex2Data,aes(x=ag,y=wage, fill = year)) +  geom_boxplot()
+
+#adjust scaling
+ggplot(ex2Data,aes(x=ag,y=wage, fill = year)) +  geom_boxplot(outlier.shape = NA) + coord_cartesian(ylim = quantile(ex2Data$wage, c(0.1, 0.9)))
+
+# Year and Wage by Ag
+ggplot(ex2Data,aes(x=year,y=wage, fill = ag))  +  geom_boxplot()
+
+#adjust scaling
+ggplot(ex2Data,aes(x=year,y=wage, fill = ag))  +  geom_boxplot(outlier.shape = NA) + coord_cartesian(ylim = quantile(ex2Data$wage, c(0.1, 0.9)))
+
+
+
+
+#separately
+ggplot(ageGroup0, aes(x=as.factor(year), y = wage))+  geom_boxplot()
+ggplot(ageGroup1, aes(x=as.factor(year), y = wage))+  geom_boxplot()
+ggplot(ageGroup2, aes(x=as.factor(year), y = wage))+  geom_boxplot()
+ggplot(ageGroup3, aes(x=as.factor(year), y = wage))+  geom_boxplot()
+ggplot(ageGroup4, aes(x=as.factor(year), y = wage))+  geom_boxplot()
+ggplot(ageGroup5, aes(x=as.factor(year), y = wage))+  geom_boxplot()
+ggplot(ageGroup6, aes(x=as.factor(year), y = wage))+  geom_boxplot()
+ggplot(ageGroup7, aes(x=as.factor(year), y = wage))+  geom_boxplot()
+ggplot(ageGroup8, aes(x=as.factor(year), y = wage))+  geom_boxplot()
+ggplot(ageGroup9, aes(x=as.factor(year), y = wage))+  geom_boxplot()
+
+#without outliers
+ggplot(ageGroup0, aes(x=as.factor(year), y = wage))+  geom_boxplot(outlier.shape = NA) + coord_cartesian(ylim = quantile(ageGroup0$wage, c(0.1, 0.9)))
+
+ggplot(ageGroup1, aes(x=as.factor(year), y = wage))+  geom_boxplot(outlier.shape = NA) + coord_cartesian(ylim = quantile(ageGroup1$wage, c(0.1, 0.9)))
+
+ggplot(ageGroup2, aes(x=as.factor(year), y = wage))+  geom_boxplot(outlier.shape = NA) + coord_cartesian(ylim = quantile(ageGroup2$wage, c(0.1, 0.9)))
+
+ggplot(ageGroup3, aes(x=as.factor(year), y = wage))+  geom_boxplot(outlier.shape = NA) + coord_cartesian(ylim = quantile(ageGroup3$wage, c(0.1, 0.9)))
+
+ggplot(ageGroup4, aes(x=as.factor(year), y = wage))+  geom_boxplot(outlier.shape = NA) + coord_cartesian(ylim = quantile(ageGroup4$wage, c(0.1, 0.9)))
+
+ggplot(ageGroup5, aes(x=as.factor(year), y = wage))+  geom_boxplot(outlier.shape = NA) + coord_cartesian(ylim = quantile(ageGroup5$wage, c(0.1, 0.9)))
+
+ggplot(ageGroup6, aes(x=as.factor(year), y = wage))+  geom_boxplot(outlier.shape = NA) + coord_cartesian(ylim = quantile(ageGroup6$wage, c(0.1, 0.9)))
+
+ggplot(ageGroup7, aes(x=as.factor(year), y = wage))+  geom_boxplot(outlier.shape = NA) + coord_cartesian(ylim = quantile(ageGroup7$wage, c(0.1, 0.9)))
+
+ggplot(ageGroup8, aes(x=as.factor(year), y = wage))+  geom_boxplot(outlier.shape = NA) + coord_cartesian(ylim = quantile(ageGroup8$wage, c(0.1, 0.9)))
+
+ggplot(ageGroup9, aes(x=as.factor(year), y = wage))+  geom_boxplot(outlier.shape = NA) + coord_cartesian(ylim = quantile(ageGroup9$wage, c(0.1, 0.9)))
+
+
+```
+
+
+
+
+```{r}
+#c. Y_it = Beta*X_it + Gamma_t +e_it: including a time fixed effect, how do estimate coefficients change?
+
+# assuming we are now allowed to use lm() as directions said not to use it for Ex 1
+
+#including year fixed effects - have to do factor otherwise data interprets second coef as an extra year gives this much more income which doesnt have economic sense
+OLSwithYearFE <- lm(wage ~ age + factor(year), data = ex2Data)
+summary(OLSwithYearFE)
+
+
+# ggplot(data = ex2Data, aes(x = age, y = wage, col = year)) + geom_point()
+```
+
+```{r}
+#manual fixed effects
+ManualOLSwithYearFE <- lm(wage ~ age + as.numeric(year == 2006) + as.numeric((year == 2007)) + as.numeric(year == 2008) + as.numeric((year == 2009))+ as.numeric(year == 2010) +as.numeric((year == 2011))+ as.numeric(year == 2012) +as.numeric((year == 2013))+ as.numeric(year == 2014) +as.numeric((year == 2015))+ as.numeric(year == 2016) +as.numeric((year == 2017))+ as.numeric(year == 2018), data = ex2Data)
+summary(ManualOLSwithYearFE)
+
+
+
+# SUPER manual fixed effects
+data <- cbind(rep(1,length(ex2Data$age)),ex2Data$age,as.numeric(ex2Data$year == 2006), as.numeric((ex2Data$year == 2007)), as.numeric(ex2Data$year == 2008), as.numeric((ex2Data$year == 2009)),as.numeric(ex2Data$year == 2010),as.numeric((ex2Data$year == 2011)), as.numeric(ex2Data$year == 2012),as.numeric((ex2Data$year == 2013)), as.numeric(ex2Data$year == 2014) ,as.numeric((ex2Data$year == 2015)), as.numeric(ex2Data$year == 2016),as.numeric((ex2Data$year == 2017)), as.numeric(ex2Data$year == 2018))
+
+betaHat <- solve(t(data)%*%data)%*%(t(data)%*%ex2Data$wage)
+
+betaHat
+
+```
+
+
+#Ex 3
+
+```{r}
+#a
+ex3Data <- datind2007.csv %>% filter(empstat != "Inactive", empstat != "Retired")
+ex3Data
+```
+
+
+```{r}
+
+#b. Linear Model
+Y <- ex3Data$empstat
+Y <- as.numeric(Y == "Employed") # 0 will, by default, be Unemployed
+X <- ex3Data$age
+
+
+
+likelihoodFunc <- function(param,x,y){
+  
+  XB = param[1] + param[2] * x
+  
+  cdf = pnorm(XB)
+  
+  
+  # give low and high cutoffs so log doesn't explode
+  cdf[cdf > 0.99999] = 0.99999
+  cdf[cdf < 0.00001] = 0.00001
+  
+  logLikelihood = y * log(cdf) + (1-y) * (log(1-cdf))
+  
+  # this is the log likelihood but we will output the negative so when we can run minimization optimizations to get the actual maximum (MLE)
+  cumLogLikelihood = sum(logLikelihood)
+  
+  return(-cumLogLikelihood)
+}
+  
+
+numChecks <-  500
+coeffStorage <-  mat.or.vec(numChecks,2)
+likelihoodGraph <- data.frame(matrix(nrow = numChecks,ncol = 2))
+
+for (i in 1:numChecks){
+  likelihoodGraph[i,1] <- i
+  startGuess <- runif(2,-5,5)
+  # using BFGS gives me a wide variation of optimal values so I wanted to use another method
+  runOptimal = optim(startGuess,fn=likelihoodFunc,method="BFGS",control=list(maxit=1000),x=X,y=Y)
+  coeffStorage[i,] = runOptimal$par
+  likelihoodGraph[i,2] <- likelihoodFunc(runOptimal$par,X,Y)
+}
+
+
+
+ggplot(likelihoodGraph, aes(x = X1,y = X2 )) + geom_point()
+
+
+##### testing - prof said we are allowed to use these to check (since convergence issues were prevalent)
+# testRegr <- glm(formula = Y ~ X, family = binomial(link = "probit"))
+# testRegr$coefficients
+# logLik(testRegr)
+# likelihoodFunc(testRegr$coefficients,X,Y)
+
+
+# due to CV issues, tried to find set of parameters found with "lowest" likelihood which is our maximization 
+# Due to inconsistent CV results, it would not always output the same paramaters, but usually they were very close (especially when you increase number of checks)
+index <- which.min(likelihoodGraph[,2])
+# coeffStorage[which.min(abs(medianB - coeffStorage[,2])),]
+
+coeffStorage[index,]
+# coeffStorage[which.min(abs(medianI - coeffStorage[,1])),]
+```
+
+# this part was really just for my own curiosity about adding age quadratically - feel free to skip
+```{r}
+#b. Quadratic - same stuff but just additional parameter
+
+Y <- ex3Data$empstat
+Y <- as.numeric(Y == "Employed")
+X1 <- ex3Data$age
+X2 <- X1^2
+
+
+likelihoodFunc <- function(param,x1,x2,y){
+  
+  XB = param[1] + param[2] * x1 + param[3]*x2
+  
+  cdf = pnorm(XB)
+  
+  cdf[cdf > 0.99999] = 0.99999
+  cdf[cdf < 0.00001] = 0.00001
+  
+  logLikelihood = y * log(cdf) + (1-y) * (log(1-cdf))
+  
+  cumLogLikelihood = sum(logLikelihood)
+  
+  return(-cumLogLikelihood)
+}
+  
+
+numChecks <-  500
+coeffStorage <-  mat.or.vec(numChecks,3)
+likelihoodGraph <- data.frame(matrix(nrow = numChecks,ncol = 2))
+
+for (i in 1:numChecks){
+  likelihoodGraph[i,1] <- i
+  startGuess <- runif(3,-1,1)
+  # using BFGS gives me a wide variation of optimal values so I wanted to use another method
+  runOptimal = optim(startGuess,fn=likelihoodFunc,method="BFGS",control=list(maxit=1000),x1=X1,x2=X2,y=Y)
+  coeffStorage[i,] = runOptimal$par
+  likelihoodGraph[i,2] <- likelihoodFunc(runOptimal$par,X1,X2,Y)
+}
+
+
+ggplot(likelihoodGraph, aes(x = X1,y = X2 )) + geom_point()
+
+
+##### testing - prof said allowed to use for checking since issues of inconsistent CV
+# testRegr <- glm(formula = Y ~ X1+X2, family = binomial(link = "probit"))
+# testRegr$coefficients
+# logLik(testRegr)
+# likelihoodFunc(testRegr$coefficients,X1,X2,Y)
+
+
+index <- which.min(likelihoodGraph[,2])
+
+
+coeffStorage[index,]
+
+
+
+```
+
+
+
+#Ex 4
+
+
+```{r}
+#a.
+ex4Data <- datind2005.csv
+ex4Data <- rbind(ex4Data,datind2006.csv)
+ex4Data <- rbind(ex4Data,datind2007.csv)
+ex4Data <- rbind(ex4Data,datind2008.csv)
+ex4Data <- rbind(ex4Data,datind2009.csv)
+ex4Data <- rbind(ex4Data,datind2010.csv)
+ex4Data <- rbind(ex4Data,datind2011.csv)
+ex4Data <- rbind(ex4Data,datind2012.csv)
+ex4Data <- rbind(ex4Data,datind2013.csv)
+ex4Data <- rbind(ex4Data,datind2014.csv)
+ex4Data <- rbind(ex4Data,datind2015.csv)
+
+# Filter out missing and Retired/Inactive
+ex4Data <-  ex4Data %>% filter(empstat != "Inactive",!is.na(empstat), empstat != "Retired")
+```
+
+
+
+```{r}
+
+#b. 
+
+Y <- ex4Data$empstat
+Y <- as.numeric(Y  == "Employed") # 0 is Unemployed
+X1 <- ex4Data$age
+# X2 <- X1^2
+X2 <- ex4Data$year
+
+# each param[3-12] will be used if the year is correct - this is how i am mimicking year fixed effects - each param associated with the change in intercept caused by year
+
+logLikelihoodFunction = function(param,x1,x2,y,modelType){
+  
+  # time FE model with intercept (as.numeric shows 1 when theyear is correct)
+  XB = param[1] + param[2]*x1 + param[3]*as.numeric(x2 == 2006) + param[4]*as.numeric(x2 == 2007) + param[5]*as.numeric(x2 == 2008) + param[6]*as.numeric(x2 == 2009) + param[7]*as.numeric(x2 == 2010) + param[8]*as.numeric(x2 == 2011) + param[9]*as.numeric(x2 == 2012) + param[10]*as.numeric(x2 == 2013) + param[11]*as.numeric(x2 == 2014) + param[12]*as.numeric(x2 == 2015) 
+  
+    
+ 
+  
+  # now if statements for each type of model: linear, probit, or logit
+  
+  
+  if (modelType == "linear"){
+    
+    #product of densities - will use OLS and dnorm(y-XB)  
+    density = dnorm(y-XB)
+    
+    density[density < 0.000001] = 0.000001 # give limit so log(0) doesn't blow up optimization
+    
+    logLikely = log(density)
+    
+    cumLogLikely = sum(logLikely)
+  }
+  
+  # probit pretty much identical to before and logit similar to that except probability part is different
+  if (modelType == "probit"){
+  
+      cdf = pnorm(XB) 
+    
+    cdf[cdf>0.999999] = 0.999999
+    cdf[cdf<0.000001] = 0.000001
+    
+    logLikely= y*log(cdf) + (1-y)*log(1-cdf)
+    
+    cumLogLikely = sum(logLikely)
+  }
+  
+  
+  # just copied probit part and adjusted the logistic function
+  if (modelType == "logit"){
+    
+    cdf = exp(XB)/(1+exp(XB))
+    
+    cdf[cdf>0.999999] = 0.999999
+    cdf[cdf<0.000001] = 0.000001
+    
+    logLikely= y*log(cdf) + (1-y)*log(1-cdf)
+    
+    cumLogLikely = sum(logLikely)
+  }
+  return(-cumLogLikely)
+}
+
+
+#checking stuff - Prof said okay to do for checking since we have convergence issues
+# lmTest <- lm(empstat == "Employed" ~  age + factor(year),data = ex4Data)
+# probitTest <- glm(empstat == "Employed" ~  age + factor(year),data = ex4Data,family = binomial(link = "probit"))
+# logitTest <- glm(empstat == "Employed" ~  age + factor(year),data = ex4Data,family = binomial(link = "logit"))
+# 
+# logLik(lmTest)
+# logLikelihoodFunction(lmTest$coefficients,X1,X2,Y,"linear")
+# logLik(probitTest)
+# logLikelihoodFunction(probitTest$coefficients,X1,X2,Y,"probit")
+# logLik(logitTest)
+# logLikelihoodFunction(probitTest$coefficients,X1,X2,Y,"logit")
+
+#--------------------------------------------------------------------
+
+
+
+
+# doing optimizations
+
+
+#----------------------------------
+# Running 200 checks on each and storing coefficients as well as likelihood from each "optimized" set of parameters.
+# Due to not 100% convergence, I will look for the parameters with the smallest likelihood (as we did negatives) as that should, in theory, be the best set (and true set) as the true set should have the highest (here lowest) likelihood but depends on us getting near that true set at least once
+
+
+#--------------------------------
+#linear optimization
+
+numChecks <-  200
+coeffStorage <-  mat.or.vec(numChecks,12)
+likelihoodGraph <- data.frame(matrix(nrow = numChecks,ncol = 2))
+
+for (i in 1:numChecks){
+  likelihoodGraph[i,1] <- i
+  
+  startGuess <- runif(12,-5,5)
+  
+  runOptimal = optim(startGuess,fn=logLikelihoodFunction,method="BFGS",control=list(maxit=10000),x1=X1,x2=X2,y=Y,modelType = "linear")
+  coeffStorage[i,] = runOptimal$par
+  likelihoodGraph[i,2] <- logLikelihoodFunction(runOptimal$par,X1,X2,Y,modelType = "linear")
+}
+
+ggplot(likelihoodGraph, aes(x = X1,y = X2 )) + geom_point()
+
+
+index <- which.min(likelihoodGraph[,2])
+linearCoef <- coeffStorage[index,]
+# lmTest$coefficients
+# linearCoef
+
+
+
+
+#---------------------------
+#probit optimization
+
+numChecks <-  200
+coeffStorage <-  mat.or.vec(numChecks,12)
+likelihoodGraph <- data.frame(matrix(nrow = numChecks,ncol = 2))
+
+for (i in 1:numChecks){
+  likelihoodGraph[i,1] <- i
+  
+  startGuess <- runif(12,-5,5)
+  
+  runOptimal = optim(startGuess,fn=logLikelihoodFunction,method="BFGS",control=list(maxit=10000),x1=X1,x2=X2,y=Y,modelType = "probit")
+  coeffStorage[i,] = runOptimal$par
+  likelihoodGraph[i,2] <- logLikelihoodFunction(runOptimal$par,X1,X2,Y,modelType = "probit")
+}
+
+ggplot(likelihoodGraph, aes(x = X1,y = X2 )) + geom_point()
+
+
+index <- which.min(likelihoodGraph[,2])
+probitCoef <- coeffStorage[index,]
+# probitTest$coefficients
+# probitCoef
+
+
+
+
+
+
+
+#---------------------------
+#logit optimization
+
+numChecks <-  200
+coeffStorage <-  mat.or.vec(numChecks,12)
+likelihoodGraph <- data.frame(matrix(nrow = numChecks,ncol = 2))
+
+for (i in 1:numChecks){
+  likelihoodGraph[i,1] <- i
+  
+  startGuess <- runif(12,-5,5)
+  
+  runOptimal = optim(startGuess,fn=logLikelihoodFunction,method="BFGS",control=list(maxit=10000),x1=X1,x2=X2,y=Y,modelType = "logit")
+  coeffStorage[i,] = runOptimal$par
+  likelihoodGraph[i,2] <- logLikelihoodFunction(runOptimal$par,X1,X2,Y,modelType = "logit")
+}
+
+ggplot(likelihoodGraph, aes(x = X1,y = X2 )) + geom_point()
+
+
+index <- which.min(likelihoodGraph[,2])
+logitCoef <- coeffStorage[index,]
+# logitTest$coefficients
+# logitCoef
+
+paste("Linear")
+linearCoef
+paste("Probit")
+probitCoef
+paste("Logit")
+logitCoef
+
+```
+
+
+
+
+# SEE WHAT YOU CAN DO ON MONDAY - probably skip (SKIPPED)
+```{r}
+
+# #b. With Hessians 
+# 
+# Y <- ex4Data$empstat
+# Y <- as.numeric(Y  == "Employed") # 0 is Unemployed
+# X1 <- ex4Data$age
+# # X2 <- X1^2
+# X2 <- ex4Data$year
+# 
+# # each param[3-12] will be used if the year is correct - this is how i am mimicking year fixed effects - each param associated with the change in intercept caused by year
+# 
+# logLikelihoodFunction = function(param,x1,x2,y,modelType){
+#   
+#   # time FE model with intercept
+#   XB = param[1] + param[2]*x1 + param[3]*as.numeric(x2 == 2006) + param[4]*as.numeric(x2 == 2007) + param[5]*as.numeric(x2 == 2008) + param[6]*as.numeric(x2 == 2009) + param[7]*as.numeric(x2 == 2010) + param[8]*as.numeric(x2 == 2011) + param[9]*as.numeric(x2 == 2012) + param[10]*as.numeric(x2 == 2013) + param[11]*as.numeric(x2 == 2014) + param[12]*as.numeric(x2 == 2015) 
+#   
+#     
+#  
+#   
+#   # now if statements for each type of model: linear, probit, or logit
+#   
+#   
+#   if (modelType == "linear"){
+#     
+#     #product of densities - will use OLS and dnorm(y-XB)  
+#     density = dnorm(y-XB)
+#     
+#     density[density < 0.000001] = 0.000001 # give limit so log(0) doesn't blow up optimization
+#     
+#     logLikely = log(density)
+#     
+#     cumLogLikely = sum(logLikely)
+#   }
+#   
+#   if (modelType == "probit"){
+#   
+#       cdf = pnorm(XB) 
+#     
+#     cdf[cdf>0.999999] = 0.999999
+#     cdf[cdf<0.000001] = 0.000001
+#     
+#     logLikely= y*log(cdf) + (1-y)*log(1-cdf)
+#     
+#     cumLogLikely = sum(logLikely)
+#   }
+#   
+#   if (modelType == "logit"){
+#     
+#     cdf = exp(XB)/(1+exp(XB))
+#     
+#     cdf[cdf>0.999999] = 0.999999
+#     cdf[cdf<0.000001] = 0.000001
+#     
+#     logLikely= y*log(cdf) + (1-y)*log(1-cdf)
+#     
+#     cumLogLikely = sum(logLikely)
+#   }
+#   return(-cumLogLikely)
+# }
+# 
+# 
+# #checking stuff ------------------------------------------------------
+# lmTest <- lm(empstat == "Employed" ~  age + factor(year),data = ex4Data)
+# probitTest <- glm(empstat == "Employed" ~  age + factor(year),data = ex4Data,family = binomial(link = "probit"))
+# logitTest <- glm(empstat == "Employed" ~  age + factor(year),data = ex4Data,family = binomial(link = "logit"))
+# 
+# logLik(lmTest)
+# logLikelihoodFunction(lmTest$coefficients,X1,X2,Y,"linear")
+# logLik(probitTest)
+# logLikelihoodFunction(probitTest$coefficients,X1,X2,Y,"probit")
+# logLik(logitTest)
+# logLikelihoodFunction(probitTest$coefficients,X1,X2,Y,"logit")
+# #--------------------------------------------------------------------
+# 
+# #linear optimization
+# numChecks <-  15
+# coeffStorage <-  mat.or.vec(numChecks,12)
+# likelihoodGraph <- data.frame(matrix(nrow = numChecks,ncol = 2))
+# hessianList <- list()
+# for (i in 1:numChecks){
+#   likelihoodGraph[i,1] <- i
+#   
+#   startGuess <- runif(12,-5,5)
+#   
+#   runOptimal = optim(startGuess,fn=logLikelihoodFunction,method="BFGS",control=list(maxit=1000),x1=X1,x2=X2,y=Y,modelType = "linear",hessian = TRUE)
+#   coeffStorage[i,] = runOptimal$par
+#   likelihoodGraph[i,2] <- logLikelihoodFunction(runOptimal$par,X1,X2,Y,modelType = "linear")
+#   hessianList[[i]] <- runOptimal$hessian 
+# }
+# 
+# # ggplot(likelihoodGraph, aes(x = X1,y = X2 )) + geom_point()
+# 
+# 
+# index <- which.min(likelihoodGraph[,2])
+# linearCoef <- coeffStorage[index,]
+# 
+# # lmTest$coefficients
+# linearCoef
+# linearHessian <- hessianList[[index]]
+# 
+# 
+# 
+# #---------------------------
+# #probit optimization
+# numChecks <-  15
+# coeffStorage <-  mat.or.vec(numChecks,12)
+# likelihoodGraph <- data.frame(matrix(nrow = numChecks,ncol = 2))
+# hessianList <- list()
+# for (i in 1:numChecks){
+#   likelihoodGraph[i,1] <- i
+#   
+#   startGuess <- runif(12,-5,5)
+#   
+#   runOptimal = optim(startGuess,fn=logLikelihoodFunction,method="BFGS",control=list(maxit=1000),x1=X1,x2=X2,y=Y,modelType = "probit",hessian = TRUE)
+#   coeffStorage[i,] = runOptimal$par
+#   likelihoodGraph[i,2] <- logLikelihoodFunction(runOptimal$par,X1,X2,Y,modelType = "probit")
+#   hessianList[[i]] <- runOptimal$hessian
+# }
+# 
+# # ggplot(likelihoodGraph, aes(x = X1,y = X2 )) + geom_point()
+# 
+# 
+# index <- which.min(likelihoodGraph[,2])
+# probitCoef <- coeffStorage[index,]
+# # probitTest$coefficients
+# probitCoef
+# probitHessian <- hessianList[[index]]
+# 
+# 
+# 
+# 
+# 
+# 
+# #---------------------------
+# #logit optimization
+# numChecks <-  15
+# coeffStorage <-  mat.or.vec(numChecks,12)
+# likelihoodGraph <- data.frame(matrix(nrow = numChecks,ncol = 2))
+# hessianList <- list()
+# for (i in 1:numChecks){
+#   likelihoodGraph[i,1] <- i
+#   
+#   startGuess <- runif(12,-5,5)
+#   
+#   runOptimal = optim(startGuess,fn=logLikelihoodFunction,method="BFGS",control=list(maxit=1000),x1=X1,x2=X2,y=Y,modelType = "logit",hessian = TRUE)
+#   coeffStorage[i,] = runOptimal$par
+#   likelihoodGraph[i,2] <- logLikelihoodFunction(runOptimal$par,X1,X2,Y,modelType = "logit")
+#   hessianList[[i]] <- runOptimal$hessian
+# }
+# 
+# # ggplot(likelihoodGraph, aes(x = X1,y = X2 )) + geom_point()
+# 
+# 
+# index <- which.min(likelihoodGraph[,2])
+# logitCoef <- coeffStorage[index,]
+# # logitTest$coefficients
+# logitCoef
+# logitHessian <- hessianList[[index]]
+# 
+# ####
+# linearCoef
+# probitCoef
+# logitCoef
+```
+
+
+
+# testing individually
+```{r}
+#finding SE to determine significance for each
+#occasionally get singular Hessian so just running while loops to redo if that is the case
+
+Y <- ex4Data$empstat
+Y <- as.numeric(Y  == "Employed") # 0 is Unemployed
+X1 <- ex4Data$age
+# X2 <- X1^2
+X2 <- ex4Data$year
+
+# issues with Hessians being singular so checking if determinant is non-zero before continuing (often gives all 0's)
+
+
+#now have a better guess of where my starting values should be so hopefully stuff is more accurate (but not always unfortunately)
+#----------------- linear -------------
+linearHessian <- matrix(0,12,12)
+while (det(linearHessian) == 0){
+  runOptimal = optim(runif(12,-1,1),fn=logLikelihoodFunction,method="BFGS",control=list(maxit=1000),x1=X1,x2=X2,y=Y,modelType = "linear",hessian = TRUE)
+  linearParam <- runOptimal$par
+  linearHessian <- runOptimal$hessian
+}
+linearFisherInfo <- solve(linearHessian) # can do without the - since we did negative return of likelihood
+linearSE <- sqrt(diag(linearFisherInfo))
+
+linearSig <- linearParam / linearSE
+linearParamAndSE <- cbind(linearParam,linearSE,linearSig)
+
+
+
+
+#----------------- probit -------------
+
+probitHessian <- matrix(0,12,12)
+while (det(probitHessian) == 0){
+  runOptimal = optim(runif(12,-1,1),fn=logLikelihoodFunction,method="BFGS",control=list(maxit=1000),x1=X1,x2=X2,y=Y,modelType = "probit",hessian = TRUE)
+  probitParam <- runOptimal$par
+  probitHessian <- runOptimal$hessian
+}
+probitFisherInfo <- solve(probitHessian)
+probitSE <- sqrt(diag(probitFisherInfo))
+
+probitSig <- probitParam / probitSE
+probitParamAndSE <- cbind(probitParam,probitSE,probitSig)
+
+
+
+
+#------------ logit ------------------- 
+logitHessian <- matrix(0,12,12)
+while (det(logitHessian) == 0){
+  
+  runOptimal = optim(runif(12,-1,1),fn=logLikelihoodFunction,method="BFGS",control=list(maxit=1000),x1=X1,x2=X2,y=Y,modelType = "logit",hessian = TRUE)
+
+  logitParam <- runOptimal$par
+  logitHessian <- runOptimal$hessian
+  
+}
+logitFisherInfo <- solve(logitHessian)
+logitSE <- sqrt(diag(logitFisherInfo))
+
+logitSig <- logitParam / logitSE
+logitParamAndSE <- cbind(logitParam,logitSE, logitSig)
+
+ParamAndSE <- cbind(linearParamAndSE,probitParamAndSE,logitParamAndSE)
+ParamAndSE <- cbind(c("Intercept","Age","2006","2007","2008","2009","2010","2011","2012","2013","2014","2015"),ParamAndSE)
+
+```
+
+
+#Ex 5 
+
+```{r}
+#DOing MEM (at means) which requires pdf instead of cdf 
+# Using parameters found before
+
+ex4DataWithFE <- cbind(ex4Data$age,as.numeric(ex4Data$year == 2006),as.numeric(ex4Data$year == 2007),as.numeric(ex4Data$year == 2008),as.numeric(ex4Data$year == 2009),as.numeric(ex4Data$year == 2010),as.numeric(ex4Data$year == 2011),as.numeric(ex4Data$year == 2012),as.numeric(ex4Data$year == 2013),as.numeric(ex4Data$year == 2014),as.numeric(ex4Data$year == 2015))
+colnames(ex4DataWithFE) <- c("age","2006","2007","2008","2009","2010","2011","2012","2013","2014","2015")
+
+dataMeans <- colMeans(ex4DataWithFE)
+dataMeans <- c(1,dataMeans)
+
+probitCoef <- ParamAndSE[,"probitParam"]
+logitCoef <- ParamAndSE[,"logitParam"]
+
+
+# get the formulas as we will take pdf of them (B_0 + x_1bar *B_1 +...)
+probitFormula <- dataMeans * probitCoef
+logitFormula <- dataMeans * logitCoef
+
+
+paste("Probit")
+#MEM is dnorm of the Formula above (sum to get them to add) times the corresponding coefficients to get MEM of each variable (age and year dummies)
+memProbit <- dnorm(sum(probitFormula)) * probitCoef[2:length(probitCoef)]
+memProbit
+
+
+#MEM is dnorm of the Formula above (sum to get them to add) times the corresponding coefficients to get MEM of each variable (age and year dummies)
+paste("Logit")
+memLogit <- dnorm(sum(logitFormula)) * logitCoef[2:length(logitCoef)]
+memLogit
+
+```
+
+```{r}
+
+# doing standard errors via boostrapping to finding ME's of resamples and then taking sqrt of variances of them
+
+
+#bootsrap 49 times with sample sizes of 500
+
+checks = 200
+
+#just so I can see what the "best" params were each time - hopefully not too off from eachother and from true
+probitParams <- mat.or.vec(nr=checks,nc = 12)
+logitParams <- mat.or.vec(nr=checks,nc = 12)
+
+
+memProbitBS <- mat.or.vec(nr = 49,nc = 11)
+memLogitBS <- mat.or.vec(nr = 49,nc = 11)
+
+# bootrapping 49 times 
+for (p in 1:49){
+  indices <- sample(nrow(ex4Data),500,replace = TRUE)
+  
+
+  # will now have to find new coefficients for resampled Data
+  Y <- ex4Data$empstat[indices]
+  Y <- as.numeric(Y  == "Employed") # 0 is Unemployed
+  X1 <- ex4Data$age[indices]
+  X2 <- ex4Data$year[indices]
+ 
+  
+   
+  # doing same for loops to find optim but fewer times since we are doing many bootstrapped data
+  #---------------------------
+  #probit optimization
+  
+  numChecks <-  checks
+  coeffStorage <-  mat.or.vec(numChecks,12)
+  likelihoodGraph <- data.frame(matrix(nrow = numChecks,ncol = 2))
+  
+  for (i in 1:numChecks){
+    likelihoodGraph[i,1] <- i
+    
+    startGuess <- runif(12,-1,1)
+    
+    runOptimal = optim(startGuess,fn=logLikelihoodFunction,method="BFGS",control=list(maxit=10000),x1=X1,x2=X2,y=Y,modelType = "probit")
+    coeffStorage[i,] = runOptimal$par
+    likelihoodGraph[i,2] <- logLikelihoodFunction(runOptimal$par,X1,X2,Y,modelType = "probit")
+    probitParams[i,] = runOptimal$par
+  
+  
+    }
+  
+  # ggplot(likelihoodGraph, aes(x = X1,y = X2 )) + geom_point()
+  
+  
+  index <- which.min(likelihoodGraph[,2])
+  probitParam <- coeffStorage[index,]
+
+
+  #---------------------------
+  #logit optimization
+  
+  numChecks <-  checks
+  coeffStorage <-  mat.or.vec(numChecks,12)
+  likelihoodGraph <- data.frame(matrix(nrow = numChecks,ncol = 2))
+  
+  for (i in 1:numChecks){
+    likelihoodGraph[i,1] <- i
+    
+    startGuess <- runif(12,-1,1)
+    
+    runOptimal = optim(startGuess,fn=logLikelihoodFunction,method="BFGS",control=list(maxit=10000),x1=X1,x2=X2,y=Y,modelType = "logit")
+    coeffStorage[i,] = runOptimal$par
+    likelihoodGraph[i,2] <- logLikelihoodFunction(runOptimal$par,X1,X2,Y,modelType = "logit")
+    logitParams[i,] = runOptimal$par
+  
+  }
+  
+  # ggplot(likelihoodGraph, aes(x = X1,y = X2 )) + geom_point()
+  
+  
+  index <- which.min(likelihoodGraph[,2])
+  logitParam <- coeffStorage[index,]
+  
+
+  #------------------- hopefully optimization found proper results -------------------
+  
+  
+  
+  
+
+
+  # look at resampled data
+  resampledData <- ex4DataWithFE[indices,]  
+  
+  dataMeansBS <- colMeans(resampledData)
+  dataMeansBS <- c(1,dataMeansBS)  
+
+
+  # get MEM for each resample   
+  #pdf (B_0 +x_1bar * B_1 + ...) * B_j
+  memProbitBS[p,] <- dnorm(sum(dataMeansBS * probitParam)) * probitCoef[2:length(probitParam)]
+  memLogitBS[p,] <- dnorm(sum(dataMeansBS * logitParam)) * logitCoef[2:length(logitParam)]
+
+  
+}
+
+
+memProbitBS_MEM_Var <- c()
+memLogitBS_MEM_Var <- c()
+
+
+
+
+# find variance for each variable (column)
+for (c in 1:ncol(memProbitBS)){
+  memProbitBS_MEM_Var <- c(memProbitBS_MEM_Var,var(memProbitBS[,c]))
+  memLogitBS_MEM_Var <- c(memLogitBS_MEM_Var,var(memLogitBS[,c]))
+  
+}
+
+# get SE 
+memProbitBS_MEM_SE <- sqrt(memProbitBS_MEM_Var)
+memLogitBS_MEM_SE <- sqrt(memLogitBS_MEM_Var)
+
+
+paste("Probit BS SE")
+memProbitBS_MEM_SE
+
+paste("Logit BS SE")
+memLogitBS_MEM_SE
+
+```
+
+[1] "Probit BS SE"
+ [1] 0.0002820159 0.0003949313 0.0018481015 0.0025152911 0.0006105406 0.0005020316 0.0012657268 0.0002372700 0.0009083086 0.0007578250 0.0012133350
+[1] "Logit BS SE"
+ [1] 0.0003301368 0.0004150476 0.0020473599 0.0027739321 0.0005897823 0.0004827867 0.0013120616 0.0001553184 0.0011121199 0.0009400965 0.0014566890
+
+
