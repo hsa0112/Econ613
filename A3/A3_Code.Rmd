@@ -1,0 +1,1925 @@
+---
+title: "A3"
+author: "Hamzah"
+date: "3/4/2022"
+output: html_document
+---
+```{r}
+getwd()
+rm(list = ls())
+library(tidyverse)
+library(ggplot2)
+
+library(data.table)
+library(texreg)
+library(xtable)
+
+
+```
+
+# best params so far - for me
+```{r}
+
+# # first is the likelihood (smaller is better here)
+# m1 <- readRDS("AnotherprevMultandLikeli.RData")
+# m2 <- readRDS("prevMultandLikeli.RData")
+# m3 <- readRDS("prevMultandLikeli.RData")
+# c1 <- readRDS("prevCondAndLikeli.Rdata")
+# 
+# 
+# 
+# #best ones 
+# saveRDS(m1,"bestMult.Rdata")
+# saveRDS(c1,"bestCond.Rdata")
+
+```
+
+
+# load the best
+```{r}
+bestMult <- readRDS("bestMult.Rdata")
+bestCond <- readRDS("bestCond.Rdata")
+# bestCondCounterFactual <- readRDS("prevCondAndLikeliCounterFactual.RData")
+```
+
+# import data
+```{r}
+datstu = fread("Data/Data/datstu_v2.csv") # might try to make long data??
+datjss = fread("Data/Data/datjss.csv")
+datsss = fread("Data/Data/datsss.csv")
+# 
+# names(datstu)
+# 
+# names(datjss)
+# 
+# names(datsss)
+
+# stargazer(datstu)
+
+# paste("Changing all '''' (blanks) to NA")
+# datstu[datstu ==""] <- NA
+# datjss[datjss ==""] <- NA
+# datsss[datsss ==""] <- NA
+```
+
+datstu: is an administrative data on students from junior high school applying for admission to senior
+high school through a centralized application system. Students apply to specific academic programs
+within a school and can submit a ranked list of up to six programs. The dataset consists of
+the following variables: score (student test score), agey (student age), male (male indicator), schoolcode1
+(first school) schoolcode2 (second school) choicepgm1 (first program) schoolpgm2 (second
+program) rankplace (admission outcome, when rankplace=1, the student got admitted to its first
+choice, when rankplace=99, the individual could not get assigned to any of her choices), and finally
+jssdistrict (the home district location of the student.)
+• datjss is a dataset that provides the point x (longitude) and point y (latitude) of each jssdistrict(district).
+• datsss is school data that consists of schoolname( school name), schoolcode(school code), sssdistrict
+(district of the school), ssslong(longitude of the school) ssslat(latitude of the school).
+
+
+#-------------------------------
+# Problem 1 - Basic Statistics
+#-------------------------------
+# a - Number of Students, Schools, and Programs
+
+```{r}
+
+# NUM STUDENTS
+
+# Assuming each row in datstu is a unique student (since no ID variable given)
+numStudents <- nrow(datstu)
+paste("I assumed each row in datstu was a unique student (no ID variable given so seemed valid - later used V1 as an id (happens when importing .csv in R for me)). Number of Students is:",numStudents)
+
+
+
+
+ #-------------------------------------------------------------
+
+
+
+# NUM SCHOOLS
+
+# Some School Repeats so have to deal with that to get unique data on schools
+paste("Looking at all schools (via unique schoolcode) in datsss.")
+
+uniqueSchoolCodes <- unique(datsss$schoolcode)
+
+
+
+
+# - SKIP ----------------------------------------
+
+
+# uniqueSchoolData <- mat.or.vec(nc=6,nr=898)
+# colnames(uniqueSchoolData) <- names(datsss)
+
+# schoolInfo_NameAndDistrict <- datsss[,2:ncol(datsss)] %>% group_by(schoolcode) %>% filter( (nchar(schoolname) == max(nchar(schoolname))) & (nchar(sssdistrict)== max(nchar(sssdistrict))) )  %>% distinct()
+
+# this is now the cleaned up version of datsss that has only unique school codes that chose the largest school names. When there were duplicates, chose the duplicate row without a missing jurisdiction (also had "" for shcoolname)
+
+# - STOP SKIP ------------------------------
+
+
+
+
+
+# take the schoolcode with the largest school name - get around abbreviation issues
+schoolInfo <- datsss[,2:ncol(datsss)] %>% group_by(schoolcode) %>% filter( (nchar(schoolname) == max(nchar(schoolname))) )  %>% distinct()
+
+
+# the remaining repeats had blank names so checked which ones didn't have blank sssdistrict (could've done max characters again but this seemed to work) 
+schoolInfo <- schoolInfo %>% group_by(schoolcode) %>% filter((n() > 1 & sssdistrict != "") | (n() == 1))
+
+# schoolInfo <- schoolInfo %>% group_by(schoolcode) %>% filter((n() > 1 & !is.na(sssdistrict)) | (n() == 1))
+
+
+
+
+
+
+
+# SKIP -------------------------------------------------------
+
+
+# reps <- c()
+# for (i in (1:length(uniqueSchoolCodes))){
+#   
+#   code <- uniqueSchoolCodes[i]
+#   indices <- which(schoolInfo$schoolcode == code)
+#   
+#   if (length(indices) > 1 ){
+#     reps <- c(reps,code)
+#     # paste("The following Code is repeated:",code)
+#   }
+#   
+#   
+# }
+# 
+# reps
+# repIndices <- c()
+# for (i in (1:length(reps))){
+#   
+#   repIndices <- c(repIndices,which(schoolInfo$schoolcode == reps[i]))
+# }
+# schoolInfo[repIndices,]
+# 
+# schoolInfo <- schoolInfo %>% group_by(schoolcode) %>% filter(sssdistrict != "")
+
+
+# schoolNames = datsss %>% group_by(schoolcode)
+# schoolNames = datsss %>% select(schoolname,schoolcode) %>% distinct()
+
+
+
+# STOP SKIP --------------------------------------------------
+
+
+
+
+
+
+
+numSchools <- nrow(schoolInfo)
+paste("I had to clean up the data on datsss for this. Many repeats of school code with different names and jurisdictions (if they had it) in datsss. I first grouped by schoolcode and then chose the row with the longest school name (least abbreviations) and used distinct() for getting rid of duplicates. Then, I noticed that there were still some repeats (68 or so) so I went again and grouped by code and then filtered out the rows where district is blank (for duplicates only) - could have also just checked which district had longest name but this seemed to work. It seemed as though all these duplicates also did not have a school name. In any case, the number of schools I found was: ",numSchools)
+paste("Same value when I just looked at how many unique schoolcodes we had which is good.")
+
+# length(unique(datsss$schoolcode))
+paste("schoolInfo has data on each unique school code with (hopefully) the most information - better version datsss which I will use instead")
+
+
+
+
+ #-------------------------------------------------------------
+
+#NUM PROGRAMS
+
+
+
+#Method 1
+
+# From the 6 schoolpgm - since the choice is the school and the program, I created a new variable that puts that choice together because I think it will be helpful later (unsure if true but just mutating data so not losing anything). Assuming if a program is available in multiple schools, it is counted multiple times (once for each school). Also did just looking at programs without tying to school (non-unique)
+
+# adding code+program columns for each person's 6 choices
+datstu = datstu %>% mutate(choice1=paste0(schoolcode1,choicepgm1),choice2=paste0(schoolcode2,choicepgm2),choice3=paste0(schoolcode3,choicepgm3),choice4=paste0(schoolcode4,choicepgm4),choice5=paste0(schoolcode5,choicepgm5),choice6=paste0(schoolcode6,choicepgm6))
+
+programData = datstu %>% select(choice1,choice2,choice3,choice4,choice5,choice6) %>% gather('key','value')
+
+numPrograms_Unique <- length(unique(programData$value))
+
+
+
+#Method 2
+
+# if not doing school unique programs
+
+programNames = datstu %>% select(choicepgm1,choicepgm2,choicepgm3,choicepgm4,choicepgm5,choicepgm6)%>% gather('key','value') %>% select(value)%>% distinct()
+numPrograms_notUnique <- nrow(programNames)
+
+paste("I found the number of programs in two ways. First was with unique programs (ie if school A and B offered Program X, that counts as 2 programs (school unique). Second, under the same setup, it is considered 1 program (school non-unique). Both definitions feel valid but have different outcomes.")
+
+paste("Number of (school unique) Programs is:",numPrograms_Unique)
+
+paste("Number of (school non-unique) Programs is:",numPrograms_notUnique)
+
+```
+#b - Number of choices (school,program)
+
+```{r}
+# Above did not preserve student number so I wanted to redo and preserve it
+
+# converted to Long
+choiceData <- gather(datstu, choiceNum, choiceProgram, choice1:choice6, factor_key=TRUE)
+# choiceData
+# each person has 6 rows - 1 corresponding to each choice
+
+numPrograms_Unique <- length(unique(choiceData$choiceProgram))
+paste("Number of Unique Choices is:", numPrograms_Unique)
+
+paste("Same result as earlier about unique school programs but how I constructred this one may be a bit more useful for future problems.")
+```
+
+
+
+
+#c - Num Students applying to atleast one school in their district
+```{r}
+
+# want to know if all schoolcodes are 5 numbers
+# maxCodeLength <- 0
+# for (i in 1:nrow(datsss)){
+  #di length <- nchar(datsss$schoolcode[i])
+  
+  # if (length > maxCodeLength){
+    # maxCodeLength <- length
+  # }
+# }
+# maxCodeLength
+# max is 7
+
+
+
+
+
+
+#extract the school code for this program so we can merge by schoolcode
+choiceData <- choiceData %>% mutate(schoolcode = parse_number(choiceProgram))
+
+
+
+
+
+
+#  SKIP -----------------------------------------------
+
+# ptm <- proc.time()
+# for (i in 1:nrow(choiceData)){
+#   print(i)
+#   # if not NA
+#   if (!is.na(choiceData$schoolcode[i])){
+#     choiceData$program[i] <- substr(choiceData$choiceProgram[i],nchar(choiceData$schoolcode[i]) + 1, nchar(choiceData$choiceProgram[i]))
+#   }
+#   
+#   # if NA
+#   else{
+#     choiceData$program[i] <- substr(choiceData$choiceProgram[i],3, nchar(choiceData$choiceProgram[i]))
+#   }
+#   
+# }
+# 
+# rel_Col <- 10 # column of schoolchoice6 (next 6 are program choices)
+# 
+# for ( i in 1:nrow(choiceData)){
+#   choice <- i %% 6
+#   
+#   choiceData$program[i] <- choiceData[i,rel_Col + choice]
+#   print(i)
+# }
+# 
+# proc.time() - ptm
+
+# choiceData$program <- condition
+  
+# there are some people who chose a program without choosing a school
+
+# Merging datstu and datsss by school code to get district and latitude/longitude of each school
+
+
+
+# STOP SKIP -----------------------------------------------
+
+
+
+
+
+paste("Some people had not put in school codes but still had a program choice which is very confusing but going with it for now. ")
+
+# merging with schoolInfo (district, longitude and latitude)
+# gc()
+mergedData <- merge(choiceData,schoolInfo[,2:5],by = "schoolcode",all.x = TRUE)
+
+
+
+# Group by V1 (each person and check if jssdistrict %in% sssdistrict)
+
+# numApplyingSameDistrict <- mergedData %>% group_by(V1) %>% summarize( sameDistrict = jssdistrict %in% sssdistrict) %>% distinct()
+
+# checking if the intersection between jssdistrict and sssdistrict is non-empty ( meaning applied to at least 1 school in same district)
+
+# numApplyingSameDistrict <- mergedData %>% group_by(V1) %>% summarize(sameDistrict = length(intersect(jssdistrict,sssdistrict) > 0)) %>% distinct()
+
+
+# group by person and check if home district is in one of the applied districts
+numApplyingSameDistrict <- mergedData %>% group_by(V1) %>% summarize(sameDistrict = jssdistrict %in% sssdistrict) %>% distinct()
+
+table(numApplyingSameDistrict$sameDistrict)
+
+paste("I merged the choice data (the long format of datstu) with the new (cleaned up) school information data (originally datsss). I merged by school code and checked if jss district was equal to one of the sssdistrict's for each person. I found that the following number of students applied to at least one school in the same home district:",table(numApplyingSameDistrict$sameDistrict)[[2]])
+
+
+```
+
+
+
+#d - number of students each high school admitted 
+```{r}
+# first create a dataset that shows admitted results (only showed for students who had rankplace 1-6 (not NA or 99 since it doesn't give us admission details))
+
+# first filter out students who have no rankplace info (NA) or did not get admitted to a choice (99)
+
+admittedData  <- subset(mergedData, rankplace != 99 & !is.na(rankplace) & rankplace != "")
+
+# show which choice they got into
+admittedData <-  admittedData %>% group_by(V1) %>% mutate(placement = paste0("choice",rankplace))
+
+#find who got in where (filter out rows where choices didn't match placement)
+admittedData <- admittedData %>% group_by(V1) %>% filter(placement == choiceNum)
+
+paste("First, I created a subset of the merged data that aimed to show admitted results. This meant I omitted students who had rankplace either equal 99 or missing. I then created a placement variable that simply stated which choice they got admitted to (choice1 through choice6). I then filtered out the rows where placement wasn't equal to choiceNum and thus got admitted data. ")
+
+# finding number of students in each school (not program unique)
+schoolAdmissions <-  admittedData %>% group_by(schoolcode) %>% summarise(admittance = n())
+
+schoolAdmissions 
+paste("To find the number of students admitted, I grouped by schoolcode and had admittance equal the size of the group.")
+paste("Key assumption that these school codes are unique")
+paste("Interestingly, althought I saw that",numSchools,"were in the sample, only a subset of them admitted students. That is, this many schools admitted students:",nrow(schoolAdmissions))
+
+
+```
+
+
+```{r}
+which(is.na(admittedData$score)) # no missing scores in the admitted data subset
+```
+
+#e - cutoff of senior high schools - lowest score admitted
+
+```{r}
+
+# find lowest score of admitted student in each school
+lowestScores <-  admittedData %>% group_by(schoolcode) %>% summarise(cutoff = min(score))
+lowestScores
+paste("I used my admitted data from earlier and grouped by school code (so looking at each school) and then summarized cutoff as the minimum score")
+
+# xtable(lowestScores)
+```
+
+
+#f - quality of school - average score of admitted students
+
+```{r}
+# find school quality by average score of admitted student
+
+schoolQuality <-  admittedData %>% group_by(schoolcode) %>% summarise(quality = mean(score))
+schoolQuality
+paste("I used my admitted data from earlier and grouped by school code (so looking at each school) and then summarized quality as the mean score")
+
+
+```
+
+
+
+
+
+
+#-------------------------------
+# Problem 2 - Data
+#-------------------------------
+
+
+
+```{r}
+
+# find all programs that were applied to (code + program) - this may omit programs in schools that exist but weren't applied to - we have no info on it
+
+paste("Since datsss doesn't tell you what programs are offered at each school, our school + program info comes from the choices each student made (can be found in our mergedData that is long)")
+
+# find unique programs
+uniquePrograms <- unique(mergedData$choiceProgram)
+
+# will create data frame with requisite columns
+program_data <- data.frame(matrix(ncol = 3, nrow = length(uniquePrograms)))
+
+names(program_data)[1:3] <- c("choiceProgram","schoolcode","program")
+
+# first row is program
+program_data[,1] <- uniquePrograms
+
+# second and third rows are school code and program 
+program_data[,2] <- parse_number(program_data[,1])
+
+for (i in 1:nrow(program_data)){
+  
+  # if not NA
+  if (!is.na(program_data[i,2])){
+    program_data[i,3] <- substr(program_data[i,1],nchar(program_data[i,2]) + 1, nchar(program_data[i,1]))
+  }
+  
+  # if NA
+  else{
+    program_data[i,3] <- substr(program_data[i,1],3, nchar(program_data[i,1]))
+  }
+  
+}
+paste("I broke the choices into schoolcode and program choice so that I could merge with the schoolInfo to get the district, longitude and latitude.")
+
+# merge with schoolInfo to get latitude and longitude and district
+
+program_data <- merge(program_data,schoolInfo[2:5], by = "schoolcode",all.x = TRUE)
+
+
+
+
+paste("I found the cutoff, size, and quality of each program and merged it with this data. My final output is called program_data")
+
+# now will have to get info about these programs from the admitted data section
+
+program_cutoff <-  admittedData %>% group_by(choiceProgram) %>% summarize(cutoff = min(score))
+
+program_quality <-  admittedData %>% group_by(choiceProgram) %>% summarize(quality = mean(score))
+
+program_size <-  admittedData %>% group_by(choiceProgram) %>% summarize(size = n())
+
+# merge with the previous data frame ot get all the info we are asked to report
+program_data <-  merge(program_data,program_cutoff,by = "choiceProgram", all.x = TRUE)
+program_data <-  merge(program_data,program_quality,by = "choiceProgram", all.x = TRUE)
+program_data <-  merge(program_data,program_size,by = "choiceProgram", all.x = TRUE)
+
+program_data
+paste("I didn't remove any where either the code or the program was missing so some of that data may be missing. If nobody got into a specific program, its info (cutoff, quality, and size) are also missing.")
+paste("First, I found all the unique programs that were applied to (not necessarily ones where anybody got accepted/applied to). I then created a data frame where the first three rows were the choice programs, the school, and the program. I then merged with schoolInfo by schoolcode to get the district, longitude and latitude. Then, using my admitted data, I found the cutoff, quality, and size for each program and merged them togehter. If nobody got in to a program, we have very little info on it.")
+```
+
+
+
+
+#---------------------------------
+# Problem 3 - Distance
+#---------------------------------
+
+```{r}
+# t <- c()
+# for (i in blanks){
+#   t <- c(t,i)
+# }
+# t
+# 
+# View(datstu[t,])
+```
+
+# cleaning up this choice data a bit to keep the necessary stuff
+```{r}
+
+# studentData <- merge(datstu,datjss[,2:4],by = "jssdistrict",all.x = TRUE)
+
+cleanedChoiceData <- choiceData[,c(1:4,17:ncol(choiceData))]
+
+# merge with individual district info
+cleanedChoiceData <- merge(cleanedChoiceData,datjss[,2:4], by = "jssdistrict", all.x = TRUE)
+
+paste("I looked at my choice data and merged with datjss to get location information about each individual. 6 rows per person (as each person had 6 choices). I then merged with the schoolInfo to get the school location information. I then looked at each row and used the given formula to find distance (after recoding to jsslong and jsslat for for point_x and point_y.")
+# find longitude and latitude of each school
+# studentData[studentData == ""] <- NA
+
+
+# rename point_x and point_y to jsslong and jsslat
+colnames(cleanedChoiceData)[10:11] <- c("jsslong","jsslat")
+
+
+#merge with schoolInfo - don't need sssdistrict for distance measures
+cleanedChoiceData <- merge(cleanedChoiceData,schoolInfo[,c(2,4,5)], by = "schoolcode",all.x = TRUE)
+
+# find distance for each person and choice (so each person and their choice1-6)
+# just using equation we are given
+cleanedChoiceData <- cleanedChoiceData %>% group_by(V1,choiceNum) %>% mutate(distance = sqrt((69.172*(ssslong-jsslong)*cos(jsslat/57.3))^2+ (69.172*(ssslat-jsslat))^2))
+
+# names(cleanedChoiceData)
+
+#re ordered
+col_names <- c("V1","score","agey","male","rankplace","choiceNum","choiceProgram","schoolcode","jssdistrict","jsslong","jsslat","ssslong","ssslat","distance")
+
+cleanedChoiceData <- cleanedChoiceData[,col_names]
+cleanedChoiceData
+```
+
+# trying to convert long to wide
+
+```{r}
+# cleanedChoiceDataWide <- data.frame(matrix(ncol = 10,nrow = numStudents))
+
+test <- cleanedChoiceData
+
+
+cleanedChoiceDataWide <- test %>%
+  pivot_wider(
+    #have different rows by choicNum ie choice1-6
+    names_from = choiceNum,
+    # values that should be different by choices
+    values_from = c(schoolcode,choiceProgram,ssslong,ssslat,distance)
+  )
+
+# names(cleanedChoiceDataWide)
+
+#re order again
+
+col_order <- c("V1","score","agey","male","rankplace","jssdistrict","jsslong","jsslat","schoolcode_choice1","schoolcode_choice2","schoolcode_choice3","schoolcode_choice4","schoolcode_choice5","schoolcode_choice6","choiceProgram_choice1","choiceProgram_choice2","choiceProgram_choice3","choiceProgram_choice4","choiceProgram_choice5","choiceProgram_choice6","ssslong_choice1","ssslong_choice2","ssslong_choice3","ssslong_choice4","ssslong_choice5","ssslong_choice6","ssslat_choice1","ssslat_choice2","ssslat_choice3","ssslat_choice4","ssslat_choice5","ssslat_choice6","distance_choice1","distance_choice2","distance_choice3","distance_choice4","distance_choice5","distance_choice6")
+# length(col_order)
+
+cleanedChoiceDataWide <- cleanedChoiceDataWide[,col_order]
+
+cleanedChoiceDataWide
+```
+
+
+
+
+
+
+
+
+
+#---------------------
+# Problem 4 - Dimensionality Reduction
+#---------------------
+#a & b - recode schoolcode and program categories 
+```{r}
+
+paste("How it made sense for me to do, I didn't make scode_rev and pgm_rev but restarted and changed the initial school codes to the reduced version and all the programs into the new ones")
+
+paste("I have converted the wide data to long data (or plan to) for ease of use. With how I have constructed it, I have done all the recoding but the names are somewhat different. Somewhat ambiguous question so hopefully my methodology is correct. If schoolcode is missing, it uses NA as the recoding.")
+
+
+# a - recode schoolcode 
+
+# recode schoolcode into its first three digits 
+paste("Creating new dataframes that are revised (_rev). Schoolcode is found in datstu and schoolInfo (cleaned up datsss)")
+
+# revisions to datstu - schoolcode is just first 3 numbers - if NA, the schoolcode is just NA so it's good
+datstu_rev <-  datstu %>% mutate(schoolcode1_rev = substr(schoolcode1,1,3),
+                                 schoolcode2_rev = substr(schoolcode2,1,3),
+                                 schoolcode3_rev = substr(schoolcode3,1,3),
+                                 schoolcode4_rev = substr(schoolcode4,1,3),
+                                 schoolcode5_rev = substr(schoolcode5,1,3),
+                                 schoolcode6_rev = substr(schoolcode6,1,3))
+
+
+
+# b - recode programs
+
+# groupings we are told
+arts <- c("General Arts", "Visual Arts")
+economics <- c("Business", "Home Economics") # i don't think this should be a group because home economics is more about cooking and housework stuff
+science <- c("General Science")
+# other is everything else
+
+# choice 1 recode
+datstu_rev <-  datstu_rev %>% group_by(V1)%>% mutate(choicepgm1_rev = if(is.na(choicepgm1)) {choicepgm1_rev <- "other"}
+                                     else if (choicepgm1 %in% arts){choicepgm1_rev  <-  "arts"}
+                                     else if (choicepgm1 %in% economics){choicepgm1_rev <-  "economics"}
+                                     else if (choicepgm1 %in% science){ choicepgm1_rev  <-  "science"}
+                                     else {choicepgm1_rev <-  "other"}
+                                     
+                                     )
+#choice 2 recode
+datstu_rev <-  datstu_rev %>% group_by(V1)%>% mutate(choicepgm2_rev = if(is.na(choicepgm2)) {choicepgm2_rev <- "other"}
+                                     else if (choicepgm2 %in% arts){choicepgm2_rev  <-  "arts"}
+                                     else if (choicepgm2 %in% economics){choicepgm2_rev <-  "economics"}
+                                     else if (choicepgm2 %in% science){ choicepgm2_rev  <-  "science"}
+                                     else {choicepgm2_rev <-  "other"}
+                                     
+                                     )
+#choice 3 recode
+datstu_rev <-  datstu_rev %>% group_by(V1)%>% mutate(choicepgm3_rev = if(is.na(choicepgm3)) {choicepgm3_rev <- "other"}
+                                     else if (choicepgm3 %in% arts){choicepgm3_rev  <-  "arts"}
+                                     else if (choicepgm3 %in% economics){choicepgm3_rev <-  "economics"}
+                                     else if (choicepgm3 %in% science){ choicepgm3_rev  <-  "science"}
+                                     else {choicepgm3_rev <-  "other"}
+                                     
+                                     )
+
+#choice 4 recode
+datstu_rev <-  datstu_rev %>% group_by(V1)%>% mutate(choicepgm4_rev = if(is.na(choicepgm4)) {choicepgm4_rev <- "other"}
+                                     else if (choicepgm4 %in% arts){choicepgm4_rev  <-  "arts"}
+                                     else if (choicepgm4 %in% economics){choicepgm4_rev <-  "economics"}
+                                     else if (choicepgm4 %in% science){ choicepgm4_rev  <-  "science"}
+                                     else {choicepgm4_rev <-  "other"}
+                                     
+                                     )
+
+#choice 5 recode
+
+datstu_rev <-  datstu_rev %>% group_by(V1)%>% mutate(choicepgm5_rev = if(is.na(choicepgm5)) {choicepgm5_rev <- "other"}
+                                     else if (choicepgm5 %in% arts){choicepgm5_rev  <-  "arts"}
+                                     else if (choicepgm5 %in% economics){choicepgm5_rev <-  "economics"}
+                                     else if (choicepgm5 %in% science){ choicepgm5_rev  <-  "science"}
+                                     else {choicepgm5_rev <-  "other"}
+                                     
+                                     )
+#choice 6 recode
+datstu_rev <-  datstu_rev %>% group_by(V1)%>% mutate(choicepgm6_rev = if(is.na(choicepgm6)) {choicepgm6_rev <- "other"}
+                                     else if (choicepgm6 %in% arts){choicepgm6_rev  <-  "arts"}
+                                     else if (choicepgm6 %in% economics){choicepgm6_rev <-  "economics"}
+                                     else if (choicepgm6 %in% science){ choicepgm6_rev  <-  "science"}
+                                     else {choicepgm6_rev <-  "other"}
+                                     
+                                     )
+
+
+
+
+#a again for school info in datsss cleaned (schoolInfo)
+
+# unsure if needed since the next questions don't discuss distance
+
+schoolInfo_rev <- schoolInfo %>% mutate(schoolcode_rev = substr(schoolcode,1,3)) # reduced from 898 to 116 unique codes
+
+# doing the cleaning again
+# choose largest character
+schoolInfo_rev <-  schoolInfo_rev %>% group_by(schoolcode_rev) %>% filter( (nchar(schoolname) == max(nchar(schoolname))) )  %>% distinct() # some have same length (like 201, 303, 310, 409, 509).
+
+
+schoolInfo_rev <-  schoolInfo_rev %>% group_by(schoolcode_rev) %>% filter( schoolname == max(schoolname) )%>% distinct()  # just tried to filter out one of the repeats (different schoolnames but exact number of characters so just wanted to select one of them)
+
+schoolInfo_rev <-  schoolInfo_rev %>% group_by(schoolcode_rev) %>% filter((n() > 1 & nchar(sssdistrict) == max(nchar(sssdistrict))) | (n() == 1))
+paste("I created datstu_rev and schoolInfo_rev that did the truncations. They both add columns to the pre-existing data (I did not want to delete any information).")
+
+datstu_rev
+schoolInfo_rev
+
+paste("For the recoding of programs, I just checked if each program was in the list for each recoding (ie arts, economics, science, or other. If missing, it should do other as well.")
+
+```
+
+# c -create new choices with revisions
+```{r}
+
+#make new choices with recoded values
+paste("Again, I did it slightly differently and did choiceProgram_rev instead of choice_rev for each person and their (up to) 6 choices (in a long format)")
+
+# did the same mutations of choice1_rev to choice6_rev
+datstu_rev = datstu_rev %>% mutate(choice1_rev=paste0(schoolcode1_rev,choicepgm1_rev),choice2_rev=paste0(schoolcode2_rev,choicepgm2_rev),choice3_rev=paste0(schoolcode3_rev,choicepgm3_rev),choice4_rev=paste0(schoolcode4_rev,choicepgm4_rev),choice5_rev=paste0(schoolcode5_rev,choicepgm5_rev),choice6_rev=paste0(schoolcode6_rev,choicepgm6_rev))
+
+# long data
+choiceData_rev <- gather(datstu_rev, choiceNum_rev, choiceProgram_rev, choice1_rev:choice6_rev, factor_key=TRUE)
+# each 6 rows refers to one person and their six choices
+
+
+
+# clean data
+cleanedChoiceData_rev <- choiceData_rev[,c(1:4,17,18,25:ncol(choiceData_rev))]
+cleanedChoiceData_rev
+paste("Final stuff with all the dimensionality reductions is in cleanedChoiceData_rev")
+```
+
+# d - recalculating cutoff and quality for each "new" program
+
+
+#admitted data - cutoff and quality for each recoded choice
+
+```{r}
+
+# new unique programs
+uniqueChoice_rev <- unique(cleanedChoiceData_rev$choiceProgram_rev)
+# uniqueChoice_rev <-uniqueChoice_rev[-c(256,427:429)] 
+
+# first have to get admitted data - remove blank and non 1-6 rankplace
+admittedData_rev  <- subset(cleanedChoiceData_rev, rankplace != 99 & !is.na(rankplace) & rankplace != "")
+
+
+#write down which choice they got
+admittedData_rev <-  admittedData_rev %>% group_by(V1) %>% mutate(placement_rev = paste0("choice",rankplace,"_rev"))
+
+# just show the info for where people got into 
+admittedData_rev <- admittedData_rev %>% group_by(V1) %>% filter(placement_rev == choiceNum_rev)
+
+paste("Did same process as earlier to get admitted data where I first filtered out people who had no rankplace info (or weren't admitted into one of their choices). Then, I filtered out the choices that didn't match with the placement (associated rankplace) and got my admitted data info (for each person that got into a program they chose (1-6)")
+
+admittedData_rev
+```
+
+
+# cutoff and quality
+```{r}
+# find lowest score of admitted group for each program
+lowestScores_rev <-  admittedData_rev %>% group_by(choiceProgram_rev) %>% summarise(cutoff_rev = min(score))
+lowestScores_rev
+paste("I used my admitted data from earlier and grouped by choice (schoolcode + program) and then summarized cutoff as the minimum score")
+
+
+```
+
+
+
+```{r}
+#find average score (quality) of admitted group to each program
+schoolQuality_rev <-  admittedData_rev %>% group_by(choiceProgram_rev) %>% summarise(quality_rev = mean(score))
+schoolQuality_rev
+paste("I used my admitted data from earlier and grouped by choice and then summarized quality as the mean score")
+
+
+```
+
+#merge quality and cutoff into choice data
+```{r}
+# cleanedChoiceData_rev <- merge(cleanedChoiceData_rev,lowestScores_rev,by = "choiceProgram_rev",all.x = TRUE)
+# cleanedChoiceData_rev <- merge(cleanedChoiceData_rev,schoolQuality_rev,by = "choiceProgram_rev",all.x = TRUE)
+
+```
+
+
+# Convert to Wide
+```{r}
+
+# cleanedChoiceDataWide_rev <- data.frame(matrix(ncol = 10,nrow = numStudents))
+
+test <- cleanedChoiceData_rev
+
+
+cleanedChoiceDataWide_rev <- test %>%
+  pivot_wider(
+    names_from = choiceNum_rev,
+    values_from = c(choiceProgram_rev)
+  )
+
+# names(cleanedChoiceDataWide_rev)
+
+# col_order <- c("V1","score","agey","male","rankplace","jssdistrict","jsslong","jsslat","schoolcode_choice1","schoolcode_choice2","schoolcode_choice3","schoolcode_choice4","schoolcode_choice5","schoolcode_choice6","choiceProgram_choice1","choiceProgram_choice2","choiceProgram_choice3","choiceProgram_choice4","choiceProgram_choice5","choiceProgram_choice6","ssslong_choice1","ssslong_choice2","ssslong_choice3","ssslong_choice4","ssslong_choice5","ssslong_choice6","ssslat_choice1","ssslat_choice2","ssslat_choice3","ssslat_choice4","ssslat_choice5","ssslat_choice6","distance_choice1","distance_choice2","distance_choice3","distance_choice4","distance_choice5","distance_choice6")
+# length(col_order)
+# 
+# cleanedChoiceDataWide <- cleanedChoiceDataWide[,col_order]
+
+
+
+
+
+```
+
+
+```{r}
+both <- c()
+none <- c()
+index <- c()
+# uniqueChoice_rev defined around 640 for part d 
+
+# checking which programs have measures of quality (had admittance) and which do not
+for (i in 1:length(uniqueChoice_rev)){
+  choice <- uniqueChoice_rev[i]
+  if (choice %in% schoolQuality_rev$choiceProgram_rev){
+    both <- c(both,choice)
+  }
+  else {
+    index <- c(index,i)
+    none <- c(none,choice)}
+  
+}
+# both
+paste("Some places had been chosen but nobody got in there")
+paste(index)
+paste("People chose these programs but nobody got admitted to them:", none) 
+```
+#-------------------------------------------
+# Setup for Next Problems
+#-------------------------------------------
+
+
+#e - top 20k ish & creating relevant dataframes - choice; score; and quality
+```{r}
+
+# rows of top 20k scores
+topVal <- head(sort(cleanedChoiceDataWide_rev$score,decreasing=TRUE),n=20000)
+
+# find how many people at each score
+count <- c()
+for (i in 1:length(unique(topVal))){
+  val <- unique(topVal)[i]
+  count <- c(count,length(which(cleanedChoiceDataWide_rev$score == val)))
+}
+
+# count
+
+paste("The Top 20,000 scores ends with people with scores of 355. Because it would seem arbitrary to cut off certain people who had 355, I included all individuals who had scores of at least 355. This included slightly more students:",sum(count))
+
+# row of top 20k ish students (at least 355)
+topStuds <- (which(cleanedChoiceDataWide_rev$score %in% unique(topVal)))
+
+
+
+# just get choice1 info on recoded/reduced info 
+
+choice1Data <- as.data.frame(matrix(ncol = 3, nrow = numStudents )) 
+choice1Data[,1] <- cleanedChoiceDataWide_rev$V1
+choice1Data[,2] <- cleanedChoiceDataWide_rev$choice1_rev
+choice1Data[,3] <-  cleanedChoiceDataWide_rev$score
+names(choice1Data) <- c("V1","choice1_rev","score_rev")
+
+#subset is just those top scores
+choice1Data <- choice1Data[topStuds,]
+
+
+# get test score info on each person
+
+
+# get program quality data
+qualityData <-  as.data.frame(matrix(ncol = length(uniqueChoice_rev), nrow = nrow(choice1Data)))
+
+paste("Some schools that people applied to but nobody got admitted (for one reason or another)")
+
+for (i in 1:length(uniqueChoice_rev)){
+
+  choice <- uniqueChoice_rev[i]
+  quality <- schoolQuality_rev$quality_rev[which(schoolQuality_rev$choiceProgram_rev == choice)]
+
+  # name of each column is quality of choice
+  names(qualityData)[i] <- choice
+  
+  
+  # each person sees the same quality so just a column of that value repeated
+  qualityData[,i] <- rep(quality,nrow(choice1Data)) 
+  
+  
+}
+
+
+```
+
+
+<!-- # convert choice data into numbers - NAH -->
+```{r}
+# uniqueChoice_rev <- uniqueChoice_rev[-c(245,427:429)] # removing ones with no info
+# 
+# 
+# for (i in 1:nrow(choice1Data)){
+#   choice <- choice1Data$choice1_rev[i]
+#   
+#   choice1Data$choiceNum[i] <- which(uniqueChoice_rev[] == choice)
+# }
+# 
+# length(uniqueChoice_rev)
+# 
+# choicesNumData <- choice1Data[,c(1,3)]
+
+
+```
+
+
+
+```{r}
+# uniqueChoice_rev <- uniqueChoice_rev[-(missingQuality)]
+
+missingQuality <- index # indices of programs with no info on quality (since nobody got in)
+missingQualityNames <- c()
+
+for (i in 1:length(none)){
+  missingQualityNames <- c(missingQualityNames,none[i])
+}
+
+firstChoiceMissingQuality <- which(choice1Data$choice1_rev %in% missingQualityNames)
+
+
+
+
+ # -------------
+
+condData <- cbind(choice1Data[,c(1,2)],qualityData)
+uniqueCondDataNames <- colnames(condData)
+condData <- condData[,-(missingQuality + 2)] # no info on the last 3 as well as 256 and also nobody picked them so not helpful (no info since no admissions)
+# +2 to each removed since first two columns are V1 (id) and choice
+
+#remove the people who first chose a school with missing info
+condData <- condData[-(firstChoiceMissingQuality),] # drop the people who's first choice was to the programs with no info
+
+
+# uniqueCondDataNames <- colnames(condData)[3:length(colnames(condData))]
+
+paste("For conditional Data, I removed the choices of schools with no info and the students who had those schools as their first choice. Two people had their first choice be one of teh schools with no admissions so I dropped them too.")
+
+uniqueFirstChoice <- unique(condData$choice1_rev)
+
+firstChoicesColumns <- c()
+
+for (i in 1: length(uniqueFirstChoice)){
+  firstChoice <- uniqueFirstChoice[i]
+  firstChoiceColumn <- which(colnames(condData) == firstChoice) 
+  firstChoicesColumns <- c(firstChoicesColumns,firstChoiceColumn)
+  
+  
+}
+paste("Only showing options that were first choices of at least one person (we can't say much about options that were not picked.")
+condData <- condData[,c(1,2,(firstChoicesColumns))]
+# program names
+uniqueCondDataNames <- colnames(condData)[3:length(colnames(condData))]
+ # -------------
+multData <- choice1Data[,c(1,3)]
+  
+paste("For multinomial Data, we just have the test score for each of these students (minimum was 355).")
+# 179887 students missing test score info (more than half)
+```
+
+```{r}
+length(intersect(colnames(condData),unique(condData[,2]))) # checking they all are there
+```
+
+```{r}
+paste("I practiced writing conditional and multinomial code for margarine data (provided by Hung-Wei) and I aimed to replicate my margarine code here (so there are some things that may seem out of place like productNames (instead of choiceNames) but I didn't want to keep changing things and mess up my code that seems to (slowly) work. Sorry for the inconvenience but I tried to comment my code as much as I could.")
+```
+
+```{r}
+paste("Number of First Choices:",length(unique(condData$choice1_rev)))
+
+
+```
+
+
+
+#-------------------------------------------
+# Problem 5
+#-------------------------------------------
+
+```{r}
+paste("Think it is multinomial logit as we are using variation in individuals (their scores) as opposed to variation in choices (ie the quality)")
+
+mergedData = merge(condData,multData,all.x = TRUE)
+
+multLogitLikelihood = function(param,data){
+  ni = nrow(data) # people
+  nj = 246 # choices 
+  
+  
+  ut = mat.or.vec(ni,nj)
+  choices = data[,2]
+  scores = data[,249]
+
+  
+  
+  # having first product be reference category so slope is 0 - 210economics
+  pn1 = c(0,param[1:(nj- 1)]) # intercepts
+  pn2 = c(0,param[nj:(2*(nj-1))]) # scores
+  
+  
+  ut[,1] <- 0 # first choice is the reference category
+  
+  for (j in 2:nj){
+  
+  
+  ut[,j] = pn1[j] + pn2[j]*scores
+  
+  }
+  
+# probabilities
+prob = exp(ut)
+
+# prob[prob>0.999999] = 0.999999
+# prob[prob<0.000001] = 0.000001
+
+prob = sweep(prob,MARGIN = 1, FUN = "/", STATS = rowSums(prob)) 
+
+
+
+# pick the right column based on choice
+
+probC = NULL
+for (i in 1:ni){
+  # find proper column
+  columnOfChoice <- which(uniqueCondDataNames== choices[i]) 
+  probC[i] = prob[i,columnOfChoice]
+}
+
+  # make sure it is not too big or too small (create cutoffs)
+  probC[probC>0.999999] = 0.999999
+  probC[probC<0.000001] = 0.000001
+  
+  like = sum(log(probC))
+  
+  # return negative likelihood
+  return(-like)
+
+  
+}
+
+
+
+# start optimization
+
+npar = (246-1) * 2 #  (for 246 choices including reference year) parameters and 2 things (intercept, and score)
+
+
+# start  = runif(npar) # randomly select best
+
+# small perturbation around my best value but originally I ran the line above (runif)
+start = bestMult[2:length(bestMult)] + runif(npar,-.0001,.0001)  # just start with the best that I got
+
+
+ptm <- proc.time()
+opt_mult_logit = optim(start,fn=multLogitLikelihood,method="BFGS",control=list(trace=6,REPORT=1,maxit=10000),data=mergedData)
+proc.time() - ptm
+
+# optimized parameters
+opt_mult_logit$par
+
+
+
+# # check if consistent
+
+# numChecks <-  5
+# coeffStorageMult <-  mat.or.vec(numChecks,npar)
+# likelihoodGraphMult <- data.frame(matrix(nrow = numChecks,ncol = 2))
+# 
+# 
+# for (i in 1:numChecks){
+# 
+#   likelihoodGraphMult[i,1] <- i
+# 
+#   startGuess <- runif(npar,-1,1)
+# 
+#   print(i)
+#   ptm <- proc.time()
+#   runOptimal = optim(startGuess,fn=multLogitLikelihood,method="BFGS",control=list(trace=6,REPORT=1,maxit=10000),data = mergedData)
+#   proc.time() - ptm
+# 
+#   coeffStorageMult[i,] = runOptimal$par
+#   likelihoodGraphMult[i,2] <- multLogitLikelihood(runOptimal$par,data = mergedData)
+# 
+#   }
+# 
+# index <- which.min(likelihoodGraphMult[,2])
+# multcoeff <- coeffStorageMult[index,]
+# multcoeff
+
+
+# save best one
+# saveRDS(c(likelihoodGraphMult[index,2],multcoeff),"prevMultandLikeli.RData")
+# First half are intercepts (relative to first choice)and second half are scores
+
+
+# bestMult # best one from all my checks
+paste("Best Multinomial Parameters (first value was likelihood)")
+bestMult
+```
+
+
+
+
+
+
+
+
+
+
+
+# AME
+```{r}
+# Coefficients
+
+# coeffMultLogit=opt_mult_logit$par # getting coefficients or use multCoeff
+
+# coeffMultLogit=multcoeff # getting coefficients
+
+ coeffMultLogit=bestMult[2:length(bestMult)] # getting coefficients
+
+
+
+# Data
+indivData <- multData[2]
+
+nj=246 # number of choices
+
+
+
+
+# Compute pij  
+
+  pn1 = c(0,coeffMultLogit[1:(nj- 1)]) # intercepts
+  pn2 = c(0,coeffMultLogit[nj:(2*(nj-1))]) # Score
+
+  
+ut=mat.or.vec(nrow(indivData),nj)
+
+
+ut[,1] = 0 # reference group
+
+
+for (j in 2:nj){
+  # multinomial logit
+  ut[,j] = pn1[j] + pn2[j]*indivData$score_rev 
+}
+
+prob   = exp(ut)          
+prob   = sweep(prob,MARGIN=1,FUN="/",STATS=rowSums(prob)) 
+
+
+
+
+# Computing marginal effects
+
+mglEffectsScore = mat.or.vec(nrow(indivData),nj)
+Score_coefs = pn2
+weightedCoeffScore = prob%*%Score_coefs
+
+# using equation given in class
+for(j in 1:nj){
+  mglEffectsScore[,j] = prob[,j]*(Score_coefs[j] - weightedCoeffScore)
+}
+
+ame_Score <- c()
+ame_Score <- cbind(ame_Score,colMeans(mglEffectsScore)) # now take average
+
+# names
+colnames(ame_Score) <- c("Score")
+rownames(ame_Score) <- colnames(condData)[3:248]
+#produce
+
+
+ame_Score
+```
+
+
+
+
+
+
+#-------------------------------------------
+# Problem 6
+#-------------------------------------------
+
+```{r}
+# gc()
+paste("Think it is conditional logit as we are using variation in choices (their quality) as opposed to variation in individuals (ie their scores)")
+
+
+# base/reference product is the first product
+
+condLogitLikelihood = function(param,data){
+  
+productNames = colnames(data[,3:ncol(data)])
+
+nj = length(3:ncol(data)) #choices - 246
+# View(nj)
+ni = nrow(data) #individuals 
+# View(ni)
+
+choices = data[,2]
+
+ut = mat.or.vec(ni,nj)
+
+# first choice (210economics is reference category)
+
+pn1 = c(0,param[c(1:(nj-1))]) # intercepts 
+
+
+ut[,1] = param[nj]*data[,productNames[1]] # reference group is first group
+
+for (j in 2:nj){
+  # loop each choice
+  
+  
+    ut[,j] = pn1[j] + param[nj] * data[,productNames[j]]    
+  
+    
+}
+
+# View(ut)
+
+# probabilities
+prob = exp(ut)
+
+# prob[prob>0.999999] = 0.999999
+# prob[prob<0.000001] = 0.000001
+
+prob = sweep(prob,MARGIN = 1, FUN = "/", STATS = rowSums(prob)) 
+
+# get pij
+
+
+# pick the right choice
+probC = NULL
+
+for (i in 1:ni){
+  
+  columnOfChoice <- which(uniqueCondDataNames== choices[i]) 
+  probC[i] = prob[i,columnOfChoice]
+  
+  }
+
+  # cutoffs for if too big or small
+  probC[probC>0.999999] = 0.999999
+  probC[probC<0.000001] = 0.000001
+  
+  like = sum(log(probC))
+  
+  # View(probC)
+  
+  # return the negative
+  return(-like)
+}
+
+
+
+#optimization
+npar = 246 # n choices: n-1 intercepts and 1 Beta
+
+# start  = runif(npar) #randomly pick start
+
+# start guess around my best optimization so far (originally used above to find values) but this generally gets me back the same/similar parameters.
+
+start = bestCond[2:length(bestCond)] + runif(npar,-.0001,.0001) # just starting with the best that I have previously got
+
+ptm <- proc.time()
+
+opt_cond_logit = optim(start,fn=condLogitLikelihood,method="BFGS",control=list(trace=6,REPORT=1,maxit=10000),
+                       data=condData)
+
+proc.time() - ptm
+
+opt_cond_logit$par
+
+
+# 
+# # check if consistent
+
+# numChecks <-  5
+# coeffStorageCond <-  mat.or.vec(numChecks,npar)
+# likelihoodGraphCond <- data.frame(matrix(nrow = numChecks,ncol = 2))
+# 
+# for (i in 1:numChecks){
+#   likelihoodGraphCond[i,1] <- i
+# #
+#   startGuess <- runif(npar,-1,1)
+# #
+#   
+#   print(i)
+#   ptm <- proc.time()
+#   runOptimal = optim(startGuess,fn=condLogitLikelihood,method="BFGS",control=list(trace=6,REPORT=1,maxit=10000),data = condData)
+#   proc.time() - ptm
+#   
+#   coeffStorageCond[i,] = runOptimal$par
+#   likelihoodGraphCond[i,2] <- condLogitLikelihood(runOptimal$par,data = condData)
+# }
+# #
+# #
+# index <- which.min(likelihoodGraphCond[,2])
+# condcoeff <- coeffStorageCond[index,]
+# condcoeff
+# 
+# # save best one
+# saveRDS(c(likelihoodGraphCond[index,2],condcoeff),"prevCondAndLikeli.Rdata")
+
+paste("Best Conditional Parameters (first value was likelihood)")
+bestCond
+# bestCond # best from all my checks
+```
+
+
+
+# AME
+```{r}
+
+# Coefficients
+# coeffCondLogit = opt_cond_logit$par # get the parameters (10 to be exact) or use condCoeff
+
+# coeffCondLogit <- condcoeff
+
+coeffCondLogit <- bestCond[2:length(bestCond)] # get coefficients
+
+nj = length(uniqueCondDataNames) # number of alternatives/choices
+
+
+# Compute probability matrix
+choiceData=condData[,3:248] # get the data about the choices (price or quality)
+
+ut=mat.or.vec(nrow(choiceData),ncol(choiceData)) # empty matrix that we will fill
+
+ut[,1] = coeffCondLogit[nj]*choiceData[,1] # first since reference group
+
+pn1 <- c(0,coeffCondLogit[1:(nj-1)]) # intercepts
+
+for (j in 2:ncol(choiceData)){
+  
+  # conditional logit
+  
+  ut[,j] = pn1[j] + coeffCondLogit[nj]*choiceData[,j] # intercept plus beta param * val
+  
+  
+}
+
+# get pij
+
+prob   = exp(ut)          
+
+prob   = sweep(prob,MARGIN=1,FUN="/",STATS=rowSums(prob))  # got the probabilities
+
+
+
+# Computing marginal effects
+
+avgMargEffCondLogit <- NULL 
+
+for(k in 1:nj){ # 1:number of choices
+  
+  margEffects = mat.or.vec(nrow(choiceData),ncol(choiceData))
+  
+  deltaIndicator <- rep(0,nj)
+  
+  deltaIndicator[k] <- 1
+  
+  # 1 for which choice we are at and 0 for all else
+  
+  
+   for(j in 1:nj){
+     margEffects[,j] = prob[,j]*(deltaIndicator[j] - prob[,k])*coeffCondLogit[nj] # last coeff which is beta
+  } 
+  
+  # get the averages after each choice
+  tempMargEffects = colMeans(margEffects)
+  avgMargEffCondLogit <- cbind(avgMargEffCondLogit,tempMargEffects)
+}
+# got the averages, now just name and post
+
+#names
+colnames(avgMargEffCondLogit) <- colnames(choiceData)
+rownames(avgMargEffCondLogit) <- colnames(choiceData)
+
+paste("Diagaonals are positive which makes sense. If the choice quality increases by 1 unit, the likelihood of choosing that choice should rise while others fall.")
+avgMargEffCondLogit
+
+
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# ---------------------------------------------------------
+# Probelm 7
+# ---------------------------------------------------------
+
+```{r}
+paste("I belive we use conditional logit here because the choices available (and the informationa bout quality) changes as the options are reduced (dropping others program)")
+```
+
+#a. - justify which model we should use
+```{r}
+paste("I believe the second model (conditional logit) should be used to conduct this exercise because we are interested in the effect of excluding choices where the program is other which means we are changing the choices and their respective variation. The information set on individual scores doesn't change so I don't think the first model would be helpful.")
+
+```
+
+
+# figure out which choices are other
+
+```{r}
+# other is the program 
+# find index of choices we care about
+
+notOtherIndex <- which(!grepl("other",uniqueCondDataNames) == TRUE)
+length(notOtherIndex)# number of remaining choices
+
+# 
+# betaCond <- bestCond[247]
+# alphaCond <- c(bestCond[2:246])
+# 
+# betaCounterFactual <- betaCond
+# alphaCounterFactual <- c(bestCond[(notOtherIndex)])
+# 
+# 
+# length(alphaCounterFactual)
+# 
+# qualityDataFull <- unname(unlist(condData[1,3:248]))
+# qualityDataNotOther <- unname(unlist(condData[1,3:248][notOtherIndex]))
+# 
+# prob = exp(alphaCounterFactual + betaCounterFactual & qualityDataNotOther) / sum(exp(c(0,bestCond[2:246]) + betaCond * qualityDataFull))
+# 
+# cfPC <- prob
+
+
+```
+
+
+
+
+# Choice Probability NO Restrictions
+```{r}
+productNames = colnames(condData[,3:ncol(condData)])
+
+nj = length(3:ncol(condData)) #choices - 246
+# View(nj)
+ni = nrow(condData) #individuals 
+# View(ni)
+choices = condData[,2]
+
+ut = mat.or.vec(ni,nj)
+
+# first choice (210economics is reference category)
+
+pn1 = c(0,bestCond[c(2:(nj))]) # intercepts 
+beta = bestCond[nj + 1]
+
+ut[,1] = beta*condData[,productNames[1]] # reference group is first group
+
+for (j in 2:nj){
+  # loop each choice
+  
+  
+    ut[,j] = pn1[j] + beta * condData[,productNames[j]]    
+  
+    
+}
+
+# View(ut)
+
+# get pij
+# probabilities
+prob = exp(ut)
+
+# prob[prob>0.999999] = 0.999999
+# prob[prob<0.000001] = 0.000001
+
+prob = sweep(prob,MARGIN = 1, FUN = "/", STATS = rowSums(prob))
+
+cbind(uniqueCondDataNames[notOtherIndex], prob[1,][notOtherIndex])
+
+fullPC <- prob[1,][notOtherIndex]
+# sum(fullPC)
+```
+
+
+#Choice Probability With Restrictions
+
+```{r}
+productNames = colnames(condData[,3:ncol(condData)])[notOtherIndex]
+
+nj = 196 #choices - 246
+# View(nj)
+ni = nrow(condData) #individuals 
+# View(ni)
+choices = condData[,2]
+
+ut = mat.or.vec(ni,nj)
+
+# first choice (210economics is reference category)
+
+pn1 = c(0,bestCond[c(2:(246))])
+
+pn1 <- pn1[notOtherIndex] # intercepts 
+
+beta = bestCond[247]
+
+ut[,1] = beta*condData[,productNames[1]] # reference group is first group
+
+for (j in 2:nj){
+  # loop each choice
+  
+  
+    ut[,j] = pn1[j] + beta * condData[,productNames[j]]    
+  
+    
+}
+
+# View(ut)
+
+#get pij
+# probabilities
+prob = exp(ut)
+
+# prob[prob>0.999999] = 0.999999
+# prob[prob<0.000001] = 0.000001
+
+prob = sweep(prob,MARGIN = 1, FUN = "/", STATS = rowSums(prob))
+
+
+
+cbind(uniqueCondDataNames[notOtherIndex], prob[1,])
+cfPC <- prob[1,]
+```
+
+
+
+# comparison stuff via table
+```{r}
+choiceProbs <- data.frame(matrix(ncol = 3,nrow = 196))
+choiceProbs[,1] <- uniqueCondDataNames[notOtherIndex]
+choiceProbs[,2] <- fullPC
+choiceProbs[,3] <- cfPC
+
+colnames(choiceProbs) <- c("choice","full","restricted")
+choiceProbs$ratio <- 1/(choiceProbs$full / choiceProbs$restricted) # restricted / full
+choiceProbs
+```
+
+
+
+
+
+
+
+
+
+# CODE UP TO HERE SHOULD RUN - STUFF BELOW WAS JUST THINGS I WAS MESSING WITH THAT WEREN'T NEEDED FOR THE ASSIGNMENT (PLEASE IGNORE)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# NO NEED TO LOOK AT REST
+
+# --------------------------------------------- Trash Dump ---------------------------------------------------------------------------------------------
+
+
+ # Try to automate finding multinomial and conditional - SKIP
+ 
+ # Multinomial values seemed similar (for the ones I checked)
+```{r}
+library(nnet)
+
+test <- mergedData
+length(uniqueCondDataNames) 
+
+test$choice1_rev[1]
+uniqueCondDataNames[1]
+
+colnames(test)[3:248]
+
+which(uniqueCondDataNames == "210economics")
+testy <- c()
+for (i in 1:nrow(mergedData)){
+  choice <- test$choice1_rev[i]
+  index <- which(uniqueCondDataNames == choice)
+  testy <- c(testy,index)
+  test$choice1_rev[i] <- index
+}
+
+
+ptm <- proc.time() 
+m = multinom(choice1_rev ~ score_rev,data = test)
+m
+# texreg()
+# summary(m)
+proc.time() - ptm
+# texreg(multi1)
+```
+
+
+# conditional logit - says singular
+```{r}
+library(glue)
+library(mlogit)
+gc()
+memory.limit(560000)
+test2 <- condData
+for (i in 1:nrow(condData)){
+  choice <- test2$choice1_rev[i]
+  index <- which(uniqueCondDataNames == choice)
+  testy <- c(testy,index)
+  test2$choice1_rev[i] <- index
+}
+
+for (i in 3:248){ # all the choices
+  colnames(test2)[i]= glue('qual_{i-2}') #quality
+}
+ptm <- proc.time() 
+condTest = mlogit.data(test2, varying = 3:248, shape = "wide", sep = '_',
+                   choice = "choice1_rev")
+
+c <- mlogit(choice1_rev ~  qual , data = condTest)
+c
+proc.time() - ptm
+summary(c)
+
+
+```
+# --------------------------------- END  OF TRASH DUMP ---------------------------------------------------------------------
+
+
+
+
+# SKIP THIS STUFF - WAS DOING RANDOM STUFF THAT WAS NOT NECESSARY AND TOO MUCH 
+
+
+# first must pick out "other" options
+```{r}
+counterFactual_Choices <- condData[,1:2]
+counterFactualPrograms <- sub("[^[:alpha:]]+", "", counterFactual_Choices[,2])
+counterfactualIndexofOther_choice1 <- which(counterFactualPrograms == "other" | counterFactualPrograms ==  "NAother")
+paste(length(counterfactualIndexofOther_choice1),"people in this set chose ''other'' as the first program choice. Try to find their second choice program (it would be their first choice if other was removed).")
+# 
+# for (i in counterfactualIndexofOther_choice1){
+#   print(i)}
+
+peopleOnlyOther <- c()
+for (i in counterfactualIndexofOther_choice1){
+  
+  id <- counterFactual_Choices[i,1]
+  # have to check if next option is also other
+  
+  index <- which(cleanedChoiceDataWide_rev$V1 == id)
+  
+  nextChoice <- cleanedChoiceDataWide_rev[index,"choice2_rev"][[1]]
+  # print("2nd choice")
+  
+    if (("other" == sub("[^[:alpha:]]+", "",nextChoice)) | (sub("[^[:alpha:]]+", "",nextChoice) == "NAother")  ){
+    nextChoice <- cleanedChoiceDataWide_rev[index,"choice3_rev"][[1]]
+    # print("3rd choice")  
+  
+      if (("other" == sub("[^[:alpha:]]+", "",nextChoice)) | (sub("[^[:alpha:]]+", "",nextChoice) == "NAother")){
+      nextChoice <- cleanedChoiceDataWide_rev[index,"choice4_rev"][[1]]
+      # print("4th choice")
+    
+        if (("other" == sub("[^[:alpha:]]+", "",nextChoice)) | (sub("[^[:alpha:]]+", "",nextChoice) == "NAother")){
+        nextChoice <- cleanedChoiceDataWide_rev[index,"choice5_rev"][[1]]
+        # print("5th choice")
+      
+          if (("other" == sub("[^[:alpha:]]+", "",nextChoice)) | (sub("[^[:alpha:]]+", "",nextChoice) == "NAother")){
+          nextChoice <- cleanedChoiceDataWide_rev[index,"choice6_rev"][[1]]
+          # print("6th choice")
+        
+              if (("other" == sub("[^[:alpha:]]+", "",nextChoice)) | (sub("[^[:alpha:]]+", "",nextChoice) == "NAother")){
+              # print("No Choices")
+                
+              peopleOnlyOther <- c(peopleOnlyOther,i)}
+          }
+      
+        }
+      }
+    }
+  
+  counterFactual_Choices[i,2] <- nextChoice
+  
+  
+}
+
+# peopleOnlyOther
+
+paste(length(peopleOnlyOther),"people had all 6 options that were cateogirzed as other (a lot of technical and agriculture). Because we are dropping the choice 'other' and each participant must make a choice, I feel as though I need to drop them because not choosing anything (as we don't have choice 7) is unhelpful.")
+
+counterFactual_Choices <- counterFactual_Choices[-(peopleOnlyOther),]
+# counterFactualPrograms <- sub("[^[:alpha:]]+", "", counterFactual_Choices[,2])
+# counterfactualIndexofOther_choice1 <- which(counterFactualPrograms == "other")
+# length(counterfactualIndexofOther_choice1)
+```
+# restructure the choices (remove other)
+```{r}
+
+counterFactualPrograms <- sub("[^[:alpha:]]+", "",uniqueCondDataNames)
+counterFactualUniqueCondDataNames <- uniqueCondDataNames[-which(counterFactualPrograms == "other")]
+
+# want to check if each counterfactual choice is in this new subset
+
+newChoices <- c()
+counter <- 0
+for (i in 1:nrow(counterFactual_Choices)){
+  
+  if (counterFactual_Choices[i,2] %in% counterFactualUniqueCondDataNames){
+    counter <- counter + 1
+  } else {newChoices <- c(newChoices,counterFactual_Choices[i,2]) }
+  
+}
+# counter
+# newChoices
+
+counterFactualUniqueCondDataNames <- c(counterFactualUniqueCondDataNames,newChoices) # add the new choices
+# 
+length(counterFactualUniqueCondDataNames)
+```
+
+
+# Creating Counterfactual Dataset
+```{r}
+counterFactualData <- cbind(counterFactual_Choices,qualityData[1:nrow(counterFactual_Choices),counterFactualUniqueCondDataNames])
+
+colNums <- c()
+for (i in 1: ncol(counterFactualData)){
+  
+  varName <- colnames(counterFactualData)[i]
+  
+  if (varName != "V1" & varName != "choice1_rev"){
+    if (varName %in% unique(counterFactualData$choice1_rev) ){colNums <- c(colNums,i)}
+  
+  }
+  
+}
+# colNums
+counterFactualData <- counterFactualData[,c(1,2,colNums)]
+counterFactualUniqueCondDataNames <- colnames(counterFactualData[3:ncol(counterFactualData)])
+```
+
+
+# optimization function
+```{r}
+condLogitLikelihoodCounterFactual = function(param,data){
+  
+productNames = colnames(data[,3:ncol(data)])
+
+nj = length(3:ncol(data)) #choices - 246
+# View(nj)
+ni = nrow(data) #individuals 
+# View(ni)
+choices = data[,2]
+
+ut = mat.or.vec(ni,nj)
+
+# first choice (210economics is reference category)
+
+pn1 = c(0,param[c(1:(nj-1))]) # intercepts & 4 choices had missing info
+
+
+ut[,1] = param[nj]*data[,productNames[1]] # reference group is first group
+
+for (j in 2:nj){
+  # loop each choice
+  
+  
+    ut[,j] = pn1[j] + param[nj] * data[,productNames[j]]    
+  
+    
+}
+
+# View(ut)
+
+# probabilities
+prob = exp(ut)
+
+# prob[prob>0.999999] = 0.999999
+# prob[prob<0.000001] = 0.000001
+
+prob = sweep(prob,MARGIN = 1, FUN = "/", STATS = rowSums(prob)) 
+
+# get pij
+
+probC = NULL
+
+for (i in 1:ni){
+  
+  columnOfChoice <- which(counterFactualUniqueCondDataNames== choices[i]) 
+  probC[i] = prob[i,columnOfChoice]
+  
+  }
+
+
+  probC[probC>0.999999] = 0.999999
+  probC[probC<0.000001] = 0.000001
+  
+  like = sum(log(probC))
+  
+  # View(probC)
+  return(-like)
+}
+
+```
+
+# Optimizing Counterfactual
+```{r}
+npar <- 212
+numChecks <-  5
+coeffStorageCondCounterfactual <-  mat.or.vec(numChecks,npar)
+likelihoodGraphCondCounterfactual <- data.frame(matrix(nrow = numChecks,ncol = 2))
+
+for (i in 1:numChecks){
+  
+  likelihoodGraphCondCounterfactual[i,1] <- i
+# #
+  # startGuess <- runif(npar)
+  startGuess <- bestCondCounterFactual[2:length(bestCondCounterFactual)]  + runif(npar,-.0000001,.0000001)
+# #
+#
+  print(i)
+  ptm <- proc.time()
+  runOptimal = optim(startGuess,fn=condLogitLikelihoodCounterFactual,method="BFGS",control=list(trace=6,REPORT=1,maxit=10000),data = counterFactualData)
+  proc.time() - ptm
+#
+  coeffStorageCondCounterfactual[i,] = runOptimal$par
+  likelihoodGraphCondCounterfactual[i,2] <- condLogitLikelihoodCounterFactual(runOptimal$par,data = counterFactualData)
+}
+# #
+# #
+index <- which.min(likelihoodGraphCondCounterfactual[,2])
+condcoeffCounterFactual <- coeffStorageCondCounterfactual[index,]
+condcoeffCounterFactual
+#
+# # save best one
+# saveRDS(c(likelihoodGraphCondCounterfactual[index,2],condcoeffCounterFactual),"prevCondAndLikeliCounterFactual.Rdata")
+bestCondCounterFactual
+# bestCond # best from all my checks
+
+```
+
+
+
+# Choice Probabilities
+```{r}
+
+condLogitLikelihoodChoiceProb = function(param,data){
+  
+productNames = colnames(data[,3:ncol(data)])
+
+nj = length(3:ncol(data)) #choices - 246
+# View(nj)
+ni = nrow(data) #individuals 
+# View(ni)
+choices = data[,2]
+
+ut = mat.or.vec(ni,nj)
+
+# first choice (210economics is reference category)
+
+pn1 = c(0,param[c(1:(nj-1))]) # intercepts & 4 choices had missing info
+
+
+ut[,1] = param[nj]*data[,productNames[1]] # reference group is first group
+
+for (j in 2:nj){
+  # loop each choice
+  
+  
+    ut[,j] = pn1[j] + param[nj] * data[,productNames[j]]    
+  
+    
+}
+
+# View(ut)
+
+# probabilities
+prob = exp(ut)
+
+# prob[prob>0.999999] = 0.999999
+# prob[prob<0.000001] = 0.000001
+
+prob = sweep(prob,MARGIN = 1, FUN = "/", STATS = rowSums(prob)) 
+
+# get pij
+
+probC = NULL
+
+for (i in 1:ni){
+  
+  columnOfChoice <- which(colnames(data)== choices[i]) 
+  probC[i] = prob[i,columnOfChoice-2]
+  
+  }
+
+
+  probC[probC>0.999999] = 0.999999
+  probC[probC<0.000001] = 0.000001
+  
+
+  return(prob[1,])
+}
+paste("The choice probabilities are the same for each person so I just showed prob of person 1 (same for each person).")
+
+
+
+# Choice Probabilities of Actual First Choices (no removing)
+uniqueCondDataNames[notOtherIndex]
+condLogitLikelihoodChoiceProb(param = bestCond[2:length(bestCond)],data = condData)[notOtherIndex]
+
+# Choice Probabilities if Remove "other"
+counterFactualUniqueCondDataNames
+condLogitLikelihoodChoiceProb(param = bestCondCounterFactual[2:length(bestCondCounterFactual)], data = counterFactualData)
+
+paste("the first couple of probabilities were not that different which was interesting.")
+
+```
+
