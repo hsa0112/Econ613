@@ -200,7 +200,7 @@ colnames(positiveIncome)[8:11] <- c("bDadEduc","bMomEduc","rDadEduc","rMomEduc")
 
 
 # subset of data that doesn't have missing for these values
-
+# filtering
 dat_A4 <- dat_A4 %>% filter(!is.na(age), !is.na(work_exp), !is.na(totEduc), !is.na(bDadEduc),!is.na(bMomEduc),!is.na(rDadEduc), !is.na(rMomEduc), !is.na(YINC_1700_2019))
 
 positiveIncome <- positiveIncome %>% filter(!is.na(age), !is.na(work_exp), !is.na(totEduc), !is.na(bDadEduc),!is.na(bMomEduc),!is.na(rDadEduc), !is.na(rMomEduc), !is.na(YINC_1700_2019))
@@ -288,14 +288,14 @@ paste("Firstly, the estimates are different now but the signs are the same. The 
 ```{r}
 
 # 
-# library(sampleSelection)
+library(sampleSelection)
 # 
 # # heckman <- selection(selection = YINC_1700_2019 > 0 ~ age + work_exp + totEduc  + bDadEduc + bMomEduc + rDadEduc + rMomEduc, outcome =  YINC_1700_2019 ~ age + work_exp + totEduc+ bDadEduc + bMomEduc + rDadEduc + rMomEduc,data = dat_A4 ,method = "2step")
 # 
-# heckman <- selection(selection = YINC_1700_2019 > 0 ~ age + work_exp + totEduc  + bDadEduc + bMomEduc + rDadEduc + rMomEduc, outcome =  YINC_1700_2019 ~ age + work_exp + totEduc,data = dat_A4 ,method = "2step")
+heckman <- selection(selection = YINC_1700_2019 > 0 ~ age + work_exp + totEduc  + bDadEduc + bMomEduc + rDadEduc + rMomEduc, outcome =  YINC_1700_2019 ~ age + work_exp + totEduc,data = dat_A4 ,method = "2step")
 # 
 # 
-# summary(heckman)
+summary(heckman)
 ```
 
 
@@ -382,10 +382,10 @@ logLikelihoodFunction = function(param,x1,x2,x3,x4,x5,x6,x7,y,d){
   cdf = 1 - pnorm(y-XB) # since top coding
   
   # recode in case they are too big or too small
-      cdf[cdf>0.999999] = 0.999999
+    cdf[cdf>0.999999] = 0.999999
     cdf[cdf<0.000001] = 0.000001
     
-    pdf[pdf>0.999999] = 0.999999
+    # pdf[pdf>0.999999] = 0.999999
     pdf[pdf<0.000001] = 0.000001
     
     # likelihood given in class (with pdf and cdf)
@@ -751,7 +751,7 @@ colnames(relData)
 
 # find the difference between observation and average (using between values) and then run regression
 withinData <- relData %>% summarise(wInc = income - avgInc, wEduc = education - avgEduc, wExp = work_exp - avgExp, wMar = mar_status - avgMar )
-withingReg = lm(wInc ~ 0 +  wEduc + wExp +wMar, data = withinData)
+withingReg = lm(wInc ~ 0 +  wEduc + wExp +wMar, data = withinData) # no intercept
 summary(withingReg) 
 
 
