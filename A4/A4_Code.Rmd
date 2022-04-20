@@ -1,0 +1,799 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+```{r}
+# load in packages
+getwd()
+rm(list = ls())
+library(tidyverse)
+library(ggplot2)
+library(utils)
+library(data.table)
+library(stringr)
+library(texreg)
+set.seed(12345)
+memory.limit(size = 161110*2)
+```
+
+
+
+# Get Data
+```{r}
+
+# unzip - UnComment and delete data file when submitting
+# unzip('Data.zip')
+
+# read in data
+
+dat_A4 <- read.csv("Data/dat_A4.csv")
+dat_A4_panel <- read.csv("Data/dat_A4_panel.csv")
+
+
+```
+
+#-------------------------------
+# Ex 1 - Preparing the Data
+#-------------------------------
+
+#a. create age and work_exp variables
+```{r}
+
+
+
+paste("There seem to be at most 11 jobs that we have to consider starting from column 18 and ending at column 28")
+
+# columns of work experiences - first and last 
+beg <- which(colnames(dat_A4) == "CV_WKSWK_JOB_DLI.01_2019")
+end <- which(colnames(dat_A4) == "CV_WKSWK_JOB_DLI.11_2019")
+
+paste("Age is the 2019 - (birth Year) as we are looking at data from 2019. Don't think the results should dramatically change if they increased by 3 years (the age now) but wanted to state it just in case.")
+paste("Work Experience is based on the weeks worked at all their experiences and then divided by 52 to get years.")
+
+for (i in 1:nrow(dat_A4)){
+
+  
+  birthYear <- dat_A4$KEY_BDATE_Y_1997[i]
+  
+  # doing 2019 minus birth - year as 2019 was the year of the data so it was the age of the person at the time of data collection
+  dat_A4$age[i] <- 2019 - birthYear
+  
+  
+  # find years of work experience (ignore NAs) and divide by 52 to go from weeks to years  
+  workExp <- dat_A4[i,c(beg:end)]
+
+  dat_A4$work_exp[i] <- sum(workExp,na.rm = TRUE)/52
+  
+}
+
+
+```
+
+#b. create additional education variables?
+```{r}
+
+paste("total Education for Mom and Dad already given in data but will just have to change Ungraded to 0(personal choice as their highest completed level is 0 - what i could surmise based on a quick google search) and need to trasnlate highest degree into years (for the individual). Changing ungraded to 0 instead of skipping because the data is not missing but rather the education they got does not correspond to a certain number of years of education.")
+
+paste("Assuming: None = 0; GED or HS = 12; Associate = 14; Bachelor = 16; Master = 18; PhD = 22; Professional = 19")
+
+
+# dropping missing education for individual and parents (must have all 5 variables to be included)
+paste("I am dropping rows where information on education is missing (for the individual AND parents)")
+dat_A4 <- subset(dat_A4,!is.na(YSCH.3113_2019) )
+dat_A4 <- subset(dat_A4,!is.na(CV_HGC_BIO_DAD_1997) )
+dat_A4 <- subset(dat_A4,!is.na(CV_HGC_BIO_MOM_1997) )
+dat_A4 <- subset(dat_A4,!is.na(CV_HGC_RES_DAD_1997) )
+dat_A4 <- subset(dat_A4,!is.na(CV_HGC_RES_MOM_1997) )
+
+
+
+for (i in 1:nrow(dat_A4)){
+  
+  # get education  
+  educ <- dat_A4$YSCH.3113_2019[i]
+  
+  
+  # chaning ungrade (= 95) to 0 for parents
+  
+  if (dat_A4$CV_HGC_BIO_DAD_1997[i] == 95 & !is.na(dat_A4$CV_HGC_BIO_DAD_1997[i])){dat_A4$CV_HGC_BIO_DAD_1997[i] <- 0}
+  
+  if (dat_A4$CV_HGC_BIO_MOM_1997[i] == 95 & !is.na(dat_A4$CV_HGC_BIO_MOM_1997[i])){dat_A4$CV_HGC_BIO_MOM_1997[i] <- 0}
+  
+  if (dat_A4$CV_HGC_RES_DAD_1997[i] == 95 & !is.na(dat_A4$CV_HGC_RES_DAD_1997[i])){dat_A4$CV_HGC_RES_DAD_1997[i] <- 0}
+  
+  if (dat_A4$CV_HGC_RES_MOM_1997[i] == 95 & !is.na(dat_A4$CV_HGC_RES_MOM_1997[i])){dat_A4$CV_HGC_RES_MOM_1997[i] <- 0}
+  
+  
+  # recoding education from cateogrical to numerical value (years)
+  
+  # None
+  if (educ == 1){dat_A4$totEduc[i] <- 0}
+  
+  # GED or HS Degree is 12 years
+  else if( educ == 2 | educ == 3){dat_A4$totEduc[i] <- 12}
+  
+  #Associate is + 2 years
+  else if( educ == 4){dat_A4$totEduc[i] <- 14}
+  
+  # Bachelor is + 2 years
+  else if( educ == 5){dat_A4$totEduc[i] <- 16}
+  
+  # Master is 2 years after bachelor
+  else if( educ == 6){dat_A4$totEduc[i] <- 18}
+  
+  # PhD is 6 more years after a Bachelor 
+  else if( educ == 7){dat_A4$totEduc[i] <- 22}
+  
+  # Professional Degree roughly 3 years after Bachelor(JD is 3 but MD and stuff is 4 but MBA is 2 so there is a lot of variation)
+  else if( educ == 4){dat_A4$totEduc[i] <- 19}
+  
+  
+}
+
+
+```
+
+
+# c. plotting/visualization
+```{r}
+
+# getting data with positive income
+positiveIncome <- subset(dat_A4, YINC_1700_2019 > 0 )
+
+# i plot income by age
+  # ggplot(data = positiveIncome, aes(x=age, y=YINC_1700_2019)) + geom_point()
+  
+  ggplot(data = positiveIncome, aes(x= as.factor(age), y=YINC_1700_2019)) + geom_boxplot()
+
+# plot income by gender (1 is male and 2 is female)
+  # ggplot(data = positiveIncome, aes(x=KEY_SEX_1997, y=YINC_1700_2019)) + geom_point()
+  
+  ggplot(data = positiveIncome, aes(x=as.factor(KEY_SEX_1997), y=YINC_1700_2019)) + geom_boxplot()
+
+  
+#plot income by number of children
+  # ggplot(data = positiveIncome, aes(x=CV_BIO_CHILD_HH_U18_2019, y=YINC_1700_2019)) + geom_point()
+  
+  ggplot(data = positiveIncome, aes(x=as.factor(CV_BIO_CHILD_HH_U18_2019), y=YINC_1700_2019)) + geom_boxplot()
+  
+#   
+# paste("For those with positive incomes, it seems as though there is rough equality in incomes between ages. Highest median at 38 but otherwise the IQR and general distribution seems similar. For gende,r it looked as though the distribution in income was higher and more varied for males (1) versus females (2). For the number of children, there seemed to be a wave for the median income where from 0 to 2 it increased and then from 2 to 4 it decreased and then it increased at 5 and decreased at 6 and then from 6 to 8 it increased. The IQR seemed roughly equal for 0  - 7 children but was tiny for 8 . Interestingly, some had missing data on children but that was included in the graphs. It seems like the upward cutoff is 100,000.")
+  
+```
+
+# table
+```{r}
+
+# finding the proportion of zero income by age, gender, and number of children
+# age
+propZero_age <- dat_A4 %>% group_by(age) %>% summarize(propZero = length(which(YINC_1700_2019 == 0)) / n())
+# gender
+propZero_gender <- dat_A4 %>% group_by(KEY_SEX_1997) %>% summarize(propZero = length(which(YINC_1700_2019 == 0)) / n())
+# number of children
+propZero_numChild <- dat_A4 %>% group_by(CV_BIO_CHILD_HH_U18_2019) %>% summarize(propZero = length(which(YINC_1700_2019 == 0)) / n())
+
+propZero_age
+propZero_gender
+propZero_numChild
+
+paste("By age, a small portion of people had no income at age 35. That value decreased at 36 and went up a bit at 37. At 38, the value jumped up (slightly lower thatn at age 35) and then at 39, it dropped down to the lowest proportion of no income. For gender, a slightly smaller proportion of males (1) had no income relative to female proportion. As the number of children increased (starting at 1 child), the proportion of people with no income decreased (beginninga t 4 kids, the proportion was 0 up to 10 decimal places.)  ")
+
+```
+
+#----------------------------------
+# Exercise 2 - Heckman Selection
+#----------------------------------
+
+
+
+#a-b. OLS 
+```{r}
+paste("Variables created were age, work experience, and totalEducation for individual. Including parent education in just selection as I don't think it is super helpful in determining income but could potentially be helpful in determining selection.")
+
+paste("For Normal OLS, using subset of positive income data.")
+# renaming parent education columns
+colnames(dat_A4)[8:11] <- c("bDadEduc","bMomEduc","rDadEduc","rMomEduc")
+colnames(positiveIncome)[8:11] <- c("bDadEduc","bMomEduc","rDadEduc","rMomEduc")
+# using subset of positive income data and removing those with missing income, age, totalEducation, or work experience
+
+
+
+# subset of data that doesn't have missing for these values
+
+dat_A4 <- dat_A4 %>% filter(!is.na(age), !is.na(work_exp), !is.na(totEduc), !is.na(bDadEduc),!is.na(bMomEduc),!is.na(rDadEduc), !is.na(rMomEduc), !is.na(YINC_1700_2019))
+
+positiveIncome <- positiveIncome %>% filter(!is.na(age), !is.na(work_exp), !is.na(totEduc), !is.na(bDadEduc),!is.na(bMomEduc),!is.na(rDadEduc), !is.na(rMomEduc), !is.na(YINC_1700_2019))
+
+# USING POSITIVE INCOME DATA (SUBSET OF OVERALL DATASET)
+
+# normOLS <- lm(YINC_1700_2019 ~ age + work_exp + totEduc + bDadEduc + bMomEduc + rDadEduc + rMomEduc, data = positiveIncome)
+
+
+# Do OLS
+normOLS <- lm(YINC_1700_2019 ~ age + work_exp + totEduc, data = positiveIncome)
+summary(normOLS)
+
+paste("There might be issues of top-coded income data. Ie, individuals who make over 100k are coded as making 100k which could lead to issues of validity and inconsistent parameter estimates. Furthermore, there could also be issues do to truncation as we are only looking at positive incomes (and not including 0) so we are truncating at 0. Heckman offers a way to correct for non-random selected samples.")
+```
+
+
+
+
+# step 1 - probit for selection for positive income
+
+```{r}
+
+paste("TA said we are allowed to use glm package for probit")
+
+heckmanProbit <- glm(YINC_1700_2019 > 0 ~ age + work_exp + totEduc + bDadEduc + bMomEduc + rDadEduc + rMomEduc,family = binomial(link = "probit"),  data = dat_A4)
+
+heckmanProbit$coefficients
+
+```
+
+
+# step 2 - inverse mills ratio
+```{r}
+# get the relevant columns
+
+# order in terms of my parameters
+
+relData <- dat_A4[,c(31,32,33,8,9,10,11)] # just getting relevant columns in order of my variables chosen
+
+# relData <- positiveIncome[,c(31,32,33,8,9,10,11)] 
+
+relData <- cbind(1,relData) # have column of 1s for intercept
+
+relData <- as.matrix(relData)
+
+
+# matrix multiplication
+linearProducts <-  relData %*% heckmanProbit$coefficients
+
+# calculate inverse mills ratio := pdf/cdf
+
+imRatio <- dnorm(linearProducts)/pnorm(linearProducts)
+
+# imRatio
+
+imRatio <- imRatio[-which(dat_A4$YINC_1700_2019 == 0)] # do for those who have non-zero income
+
+```
+
+
+# Heckman Result
+```{r}
+# do the OLS but include the IMR 
+
+# heckmanOLS <- lm(YINC_1700_2019 ~ age + work_exp + totEduc  + bDadEduc + bMomEduc + rDadEduc + rMomEduc + imRatio, data = positiveIncome)
+
+heckmanOLS <- lm(YINC_1700_2019 ~ age + work_exp + totEduc  + imRatio, data = positiveIncome) # removing selection regressors (parent education)
+summary(heckmanOLS)
+
+```
+
+# Compare
+```{r}
+summary(normOLS)
+summary(heckmanOLS)
+
+
+paste("Firstly, the estimates are different now but the signs are the same. The Heckman estimates look to be larger too. This can be because we are now accounting selection issues (positive income) in the Heckman Model due to non-random missing data (only positive income). All three variables chosen (age, work_exp, and total education) now seem to be statistically significant (namely age becomes more significant).")
+```
+
+
+#Check (seems to be similar!)
+
+```{r}
+
+# 
+# library(sampleSelection)
+# 
+# # heckman <- selection(selection = YINC_1700_2019 > 0 ~ age + work_exp + totEduc  + bDadEduc + bMomEduc + rDadEduc + rMomEduc, outcome =  YINC_1700_2019 ~ age + work_exp + totEduc+ bDadEduc + bMomEduc + rDadEduc + rMomEduc,data = dat_A4 ,method = "2step")
+# 
+# heckman <- selection(selection = YINC_1700_2019 > 0 ~ age + work_exp + totEduc  + bDadEduc + bMomEduc + rDadEduc + rMomEduc, outcome =  YINC_1700_2019 ~ age + work_exp + totEduc,data = dat_A4 ,method = "2step")
+# 
+# 
+# summary(heckman)
+```
+
+
+#-----------------
+#Ex 3 Censoring
+#-----------------
+
+# assuming we are still using the positive income data
+
+#a. Plot histogram
+```{r}
+# get data that is below the threshold 
+censoredData <- subset(dat_A4, YINC_1700_2019 < 100000)
+# dataset for under 100k
+
+# create histogram
+incHist <- ggplot(dat_A4, aes(x=YINC_1700_2019)) + geom_histogram()
+incHist
+
+paste("For the most part, it seemed relatively symmetric around 40k ish but then there is a huge spike at 100k which indicates that the data may be top-coded at 100k. This means that individuals making over 100k are seen as making exactly 100k in the data even though they make more. So the 100k frequency includes all people making at least 100k.")
+```
+
+# tobit for topcoding
+
+# probit for top coding (not needed)
+```{r}
+
+tobitProbit <- glm(YINC_1700_2019 < 100000 ~ age + work_exp + totEduc ,family = binomial(link = "probit"),  data = dat_A4)
+
+tobitProbit$coefficients
+
+
+```
+
+
+
+# tobit check stuff (needed because of CV issues)
+```{r}
+paste("When manually optimizing, my convergence was not consistent so professor said it was okay to use package to get results and perturb start guess around it")
+
+paste("Again, with censoring, I am not including parent education as I don't know how strongly it correlates to income (definitely less so than age, work experience, and total education and adding variables for the sake of adding them doesn't seem to be beneficial.")
+
+library(censReg)
+# 
+cReg <- censReg(YINC_1700_2019 ~ age + work_exp + totEduc , left = -Inf , right = 100000, data = dat_A4)
+# 
+summary(cReg)
+# 
+
+
+```
+
+
+# likelihood and maximization (following class notes)
+```{r}
+
+# income data
+Y <- dat_A4$YINC_1700_2019
+# indicator for censored
+D <- as.numeric(Y  <  100000) # 1 if income the real value of the income is showed 
+
+
+# relevant parameters
+# age, work experience, total education, and bio/res mom/dad education
+X1 <- dat_A4$age
+X2 <- dat_A4$work_exp
+X3 <- dat_A4$totEduc
+X4 <- dat_A4$bDadEduc
+X5 <- dat_A4$bMomEduc
+X6 <- dat_A4$rDadEduc
+X7 <- dat_A4$rMomEduc
+
+# likelihood function
+logLikelihoodFunction = function(param,x1,x2,x3,x4,x5,x6,x7,y,d){
+  
+
+  # XB = param[1] + param[2]*x1 + param[3]*x2 + param[4]*x3 + param[5]*x4 + param[6]*x5 + param[7]*x6 + param[8]*x7  
+  XB = param[1] + param[2]*x1 + param[3]*x2 + param[4]*x3
+  
+
+  pdf =  dnorm(y - XB)
+  # cdf = pnorm(y - XB)  # 1 - pnorm?
+  
+  cdf = 1 - pnorm(y-XB) # since top coding
+  
+  # recode in case they are too big or too small
+      cdf[cdf>0.999999] = 0.999999
+    cdf[cdf<0.000001] = 0.000001
+    
+    pdf[pdf>0.999999] = 0.999999
+    pdf[pdf<0.000001] = 0.000001
+    
+    # likelihood given in class (with pdf and cdf)
+    logLikely= d*log(pdf) + (1-d)*log(cdf)
+    
+    cumLogLikely = sum(logLikely)
+    
+    return(-cumLogLikely)
+    
+}
+
+
+# doing a bunch of checks
+numChecks <-  10000
+
+coeffStorage <-  mat.or.vec(numChecks,8) # intercept + 7 vars
+likelihoodGraph <- data.frame(matrix(nrow = numChecks,ncol = 2))
+
+
+ptm <- proc.time()
+
+for (i in 1:numChecks){
+  
+  likelihoodGraph[i,1] <- i
+  
+  
+  startGuess <- cReg$estimate[1:4] + runif(4,-50,50) # perturbing prepackaged result to get more consistent convergence
+
+  # startGuess <-  runif(4,-5000,5000) # get convergence issues with this (same/similar likelihoods but varying values)
+  
+  runOptimal = optim(startGuess,fn=logLikelihoodFunction,method="BFGS",control=list(maxit=10000),x1=X1, x2=X2, x3 = X3, x4=X4, x5=X5, x6=X6, x7=X7, y=Y,d = D)
+  
+  coeffStorage[i,] = runOptimal$par
+  
+  likelihoodGraph[i,2] <- logLikelihoodFunction(runOptimal$par,X1,X2,X3,X4,X5,X6,X7,Y,D)
+  
+  
+}
+
+proc.time() - ptm
+
+index <- which.min(likelihoodGraph[,2])
+optimParams <- coeffStorage[index,]
+
+optimParams[1:4]
+```
+
+```{r}
+# logLikelihoodFunction(optimParams,X1,X2,X3,X4,X5,X6,X7,Y,D)
+# 
+# logLikelihoodFunction(cReg$estimate[1:4],X1,X2,X3,X4,X5,X6,X7,Y,D)
+
+```
+
+
+# --------------------------------
+# Ex 4 - Panel Data
+# --------------------------------
+
+#a
+```{r}
+paste("This ability bias can be seen as the actual effect of additional schooling on earnings and the observed gap among workers with varying education levels. There can be issues such as those with higher ability tend to be in school longer but also tend to be more efficient (and get higher wages). It is also difficult because ability is not easily measured. Panel methods, assuming ability is fixed, can get 'netted out'")
+
+
+```
+
+```{r}
+# colnames(dat_A4_panel)
+
+# income columns
+incCol <- grepl("YINC",colnames(dat_A4_panel))
+incCol <- which(incCol == TRUE)
+
+incData <- dat_A4_panel[,c(2,incCol)]
+
+colnames(incData)[2:ncol(incData)] <- str_sub(colnames(incData)[2:ncol(incData)], start = -4)
+
+
+# marriage columns
+marCol <- grepl("MARSTAT",colnames(dat_A4_panel))
+marCol <- which(marCol == TRUE)
+
+marData <- dat_A4_panel[,c(2,marCol)]
+
+colnames(marData)[2:ncol(marData)] <- str_sub(colnames(marData)[2:ncol(marData)], start = -4)
+
+
+
+# degree columns
+degCol <- grepl("CV_HIGHEST_DEGREE",colnames(dat_A4_panel))
+degCol <- which(degCol == TRUE)
+
+degData <- dat_A4_panel[,c(2,degCol)]
+# some of them are EDT which isn't consistent with the previous years so dropping them and just keeping education prior to it - for 2015 onward, its the only one but dropping them for 2010-2013
+# edt <- which(grepl( "EDT",colnames(degData)))
+degData <- degData[, -c(14,16,18)]
+
+colnames(degData)[2:ncol(degData)] <- str_sub(colnames(degData)[2:ncol(degData)], start = -4)
+
+
+
+
+# experience columns
+expCol <- grepl("CV_WKSWK_JOB_DLI", colnames(dat_A4_panel))
+expCol <- which(expCol == TRUE)
+
+expData <- dat_A4_panel[,c(2,expCol)]
+
+# colnames(expData)[2:ncol(expData)] <- str_sub(colnames(expData)[2:ncol(expData)], start = -4)
+
+
+```
+
+
+
+
+
+# converting experience to years
+```{r}
+firstColExp <- c()
+
+# years of the survey (skipped 12,14,16,18)
+surveyYears <- c(1997:2011,2013,2015,2017,2019)
+
+# find the first column of each year
+for (i in surveyYears){
+  firstCol <- which(grepl(i,colnames(expData)) == TRUE)[1]
+  firstColExp <- c(firstColExp,firstCol)
+}
+
+
+firstColExp
+
+# change the first index to +1 since we have a PUBID var now
+firstColExp[1] <- firstColExp[1] + 1
+
+# create empty experience data frame
+expDataYear <- as.data.frame(matrix(ncol = 20, nrow = nrow(dat_A4_panel)))
+# first columnis PUBID
+expDataYear[,1] <- dat_A4_panel$PUBID_1997
+colnames(expDataYear)[1] <- colnames(dat_A4_panel)[2]
+
+
+# for (i in 1:length(surveyYears)){
+#   # if not the last one
+#   year <- surveyYears[i]
+#   
+#   if (i < length(surveyYears)){
+#     workExp <- expData[,firstColExp[i]:(firstColExp[i+1]-1)]
+#     work_exp <- sum(workExp,na.rm = TRUE)/52
+#     
+#     colnames(expDataYear)[i+1] <- paste0("work_exp_",year)
+#     expDataYear[,i+1] <- work_exp
+#   }
+#   else {
+#     workExp <- expData[,firstColExp[174]:ncol(expData)]
+#     work_exp <- sum(workExp,na.rm = TRUE)/52
+#     
+#     colnames(expDataYear)[i+1] <- paste0("work_exp_",year)
+#     expDataYear[,i+1] <- work_exp
+#     
+#   }
+#   
+#   
+# }
+
+# paste("Recoding NA experience as 0")
+
+# for each person, find their work experience in each year (data should be cumulative but it doesn't seem to be.)
+
+# go through each row
+for (n in 1:nrow(expData)){
+
+    # missing <- which(is.na(expData[n,]))
+  # expData[n,missing] <- 0 # recode to 0
+  
+  # go through each year
+  # caclulate experience in each year
+  for (i in 1:length(surveyYears)){
+
+    
+  year <- surveyYears[i]
+  
+  # if not the last one
+  if (i < length(surveyYears)){
+    # get weeks
+    workExpWeeks <- expData[n,firstColExp[i]:(firstColExp[i+1]-1)]
+    
+    # convert to years
+    work_exp <- sum(workExpWeeks,na.rm = TRUE)/52
+    
+    # if all missing, label it as missing
+    if (all(is.na(workExpWeeks) == TRUE)){
+      work_exp <- NA
+    }
+    
+    # name the column
+    colnames(expDataYear)[i+1] <- paste0("work_exp_",year)
+    
+    # add to corresponding column
+    
+    # commented code adds the previous years but data says its already cumulative (although it doesn't look like it)
+    # expDataYear[n,i+1] <- work_exp + expDataYear[n,i] # current work experience + previous experience
+    
+    expDataYear[n,i+1] <- work_exp
+    }
+  
+  # if last one
+  else {
+    workExp <- expData[n,firstColExp[length(surveyYears)]:184]
+    work_exp <- sum(workExp,na.rm = TRUE)/52
+    
+    if (all(is.na(workExpWeeks) == TRUE)){
+      work_exp <- NA
+    }
+    
+    colnames(expDataYear)[i+1] <- paste0("work_exp_",year)
+    # expDataYear[n,i+1] <- work_exp + expDataYear[n,i]# current work experience + previous experience
+    expDataYear[n,i+1] <- work_exp
+  }
+  
+  
+}
+    
+}
+# rename columns to just the years
+colnames(expDataYear)[2:ncol(expDataYear)] <- str_sub(colnames(expDataYear)[2:ncol(expDataYear)], start = -4)
+
+```
+
+#converting education to years
+
+```{r}
+
+# same stuff as before in regards to recoding degree to years
+for (n in 1:nrow(degData)){
+  for (j in 2:ncol(degData)){
+    
+    educ <- degData[n,j]
+    
+    if (is.na(educ)){
+      educ <- NA
+    }
+    else if (educ == 0) {
+      educ <- 0 
+    }
+    else if (educ == 1 | educ == 2){
+      educ <- 12
+    }
+    else if (educ == 3){
+      educ <- 14
+    }
+    else if (educ == 4){
+      educ <- 16
+    }
+    else if (educ == 5){
+      educ <- 18
+    }
+    else if (educ == 6){
+      educ <- 22
+    }
+    else if (educ == 7){
+      educ <- 19
+    }
+    
+    # recode
+    degData[n,j] <- educ
+  }
+  
+
+}
+
+colnames(degData)[2:ncol(degData)] <- str_sub(colnames(degData)[2:ncol(degData)], start = -4)
+
+```
+
+
+
+# converting to long data so we can do OLS
+```{r}
+
+# converting all these sub datas to long data 
+
+incDataLong <- incData %>% gather(year,value, -c(PUBID_1997))
+# View(incDataLong)
+colnames(incDataLong)[3] <- "income"
+
+
+marDataLong <- marData %>% gather(year,value, -c(PUBID_1997))
+# recode marital status to 0 if NOT MARRIED (ie != 1)
+colnames(marDataLong)[3] <- "mar_status"
+for (n in 1:nrow(marDataLong)){
+  stat <- marDataLong$mar_status[n]
+  if (!is.na(stat)){
+    if (stat == 2 | stat == 3 | stat == 4){
+      stat <- 0
+      marDataLong$mar_status[n] <- stat    
+
+    }
+  }
+  
+}
+
+# View(marDataLong)
+
+expDataYearLong <- expDataYear %>% gather(year,value, -c(PUBID_1997))
+# View(expDataYearLong)
+colnames(expDataYearLong)[3] <- "work_exp"
+degDataLong <- degData %>% gather(year,value, -c(PUBID_1997))
+# View(degDataLong)
+colnames(degDataLong)[3] <- "education"
+
+
+
+```
+
+# create relevant data frame
+```{r}
+gc()
+
+# merge data sets to create relData
+relData <- merge(incDataLong,degDataLong, by = c("PUBID_1997","year"), all.x = TRUE)
+relData <- merge(relData,expDataYearLong,by = c("PUBID_1997","year"), all.x = TRUE)
+relData <- merge(relData, marDataLong,by = c("PUBID_1997","year"), all.x = TRUE)
+
+
+# dropping any rows with any missing info
+relData <- na.omit(relData)
+length(unique(relData$PUBID_1997))
+
+test <- relData %>% group_by(PUBID_1997) %>% filter(n() != 19)
+length(unique(test$PUBID_1997))
+# View(relData)
+colnames(relData)
+```
+
+# how many individual have the weird experience thing
+```{r}
+test <- relData %>% group_by(PUBID_1997) %>% summarize(incr = all(diff(work_exp) == 1))
+table(test$incr)
+```
+
+
+
+
+#b.
+# between estimator
+```{r}
+
+# find averages of each variable for each person and run that regression
+betData <- relData %>% group_by(PUBID_1997) %>% summarise(avgInc = mean(income), avgEduc = mean(education), avgExp = mean(work_exp), avgMar = mean(mar_status))
+betReg <- lm(avgInc ~  avgEduc + avgExp +avgMar, data = betData)
+summary(betReg)
+```
+
+
+# within estimator
+```{r}
+# within estimator
+
+relData <- merge(relData, betData, by = "PUBID_1997", all.x = TRUE)
+colnames(relData)
+
+# find the difference between observation and average (using between values) and then run regression
+withinData <- relData %>% summarise(wInc = income - avgInc, wEduc = education - avgEduc, wExp = work_exp - avgExp, wMar = mar_status - avgMar )
+withingReg = lm(wInc ~ 0 +  wEduc + wExp +wMar, data = withinData)
+summary(withingReg) 
+
+
+```
+
+
+# first difference estimator - value - previous value
+
+```{r}
+# lagged data based on difference between this year and previous observation (not necessarily last year) and then regress
+lagData <- relData %>% group_by(PUBID_1997) %>% mutate(lInc = income - dplyr::lag(income, order_by = year), lEduc = education- dplyr::lag(education, order_by = year), lExp = work_exp - dplyr::lag(work_exp, order_by = year), lMar = mar_status- dplyr::lag(mar_status, order_by = year))
+
+lagReg = lm(lInc ~ lEduc + lExp + lMar, data = lagData)
+summary(lagReg)
+```
+
+# first difference (subtract from first value)
+```{r}
+# lagData <- relData %>% group_by(PUBID_1997) %>% summarise(lInc = income - income[1], lEduc = education - education[1], lExp = work_exp - work_exp[1], lMar = mar_status - mar_status[1])
+# 
+# lagReg = lm(lInc ~ lEduc + lExp + lMar, data = lagData)
+# 
+# summary(lagReg)
+```
+
+
+# CHECK
+```{r}
+library(plm)
+
+formula = income ~ education + work_exp + mar_status
+
+model1 = plm(formula, data=relData, model="between")
+model2 = plm(formula, data=relData, model="within")
+model3 = plm(formula, data=relData, model="fd")
+
+
+summary(model1)
+
+summary(model2)
+
+summary(model3)
+
+
+```
